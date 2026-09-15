@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>工地管理</title>
+<meta name="theme-color" content="#E8862E">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<!-- iOS 的主畫面圖示不吃 SVG，一定要給 PNG，不然會退回用網頁截圖當圖示 -->
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="app-header">
+  <button id="back-btn" class="icon-btn hidden" aria-label="返回">←</button>
+  <h1 id="header-title">工地管理</h1>
+  <button id="sync-status-btn" class="icon-btn" aria-label="同步狀態">☁️</button>
+</header>
+
+<main>
+  <!-- 專案總覽 -->
+  <section id="view-projects" class="view active">
+    <div class="status-filter" id="status-filter">
+      <button class="filter-btn active" data-status="all">全部</button>
+      <button class="filter-btn" data-status="not_started">未開始</button>
+      <button class="filter-btn" data-status="in_progress">進行中</button>
+      <button class="filter-btn" data-status="done">已完成</button>
+    </div>
+    <div id="project-list" class="project-list"></div>
+    <div id="project-empty" class="empty-state hidden">
+      <p>尚未建立任何工地</p>
+      <button class="primary-btn" id="project-empty-add-btn">新增第一個工地</button>
+    </div>
+    <button id="add-project-btn" class="fab" aria-label="新增工地">＋</button>
+  </section>
+
+  <!-- 甘特圖總覽 -->
+  <section id="view-gantt" class="view">
+    <h2 class="section-title">進度甘特圖</h2>
+    <p class="hint-text">淺色長條＝預排工期，深色格子＝實際到場天，紅框＝進度落後，紅線＝今天。</p>
+    <div class="gantt-scroll"><canvas id="gantt-canvas"></canvas></div>
+    <div id="gantt-empty" class="empty-state hidden"><p>尚未有工地資料</p></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="view-settings" class="view">
+    <h2 class="section-title">設定</h2>
+    <div class="card">
+      <label for="settings-company">公司名稱（報告浮水印）</label>
+      <input id="settings-company" type="text" placeholder="例如：大安工程行">
+    </div>
+    <div class="card">
+      <h3>OneDrive 雲端同步</h3>
+      <p id="sync-account-info" class="text-muted">尚未登入</p>
+      <button id="onedrive-login-btn" class="primary-btn full-width">登入 Microsoft 帳號</button>
+      <button id="onedrive-logout-btn" class="secondary-btn full-width hidden">登出</button>
+      <button id="sync-now-btn" class="secondary-btn full-width hidden">立即同步</button>
+      <p id="sync-last-time" class="text-muted"></p>
+      <p id="sync-error" class="error-text hidden"></p>
+    </div>
+    <div class="card">
+      <h3>關於</h3>
+      <p class="text-muted">所有資料儲存在本機裝置，照片標註與 PDF 報告皆在裝置端產生，不會經過任何伺服器；同步功能只會傳送到你自己的 OneDrive。</p>
+    </div>
+  </section>
+
+  <!-- 工地詳細 -->
+  <section id="view-project-detail" class="view">
+    <div class="project-detail-header">
+      <div>
+        <h2 id="detail-project-name">工地名稱</h2>
+        <span id="detail-project-status" class="status-badge"></span>
+      </div>
+      <button id="edit-project-btn" class="icon-btn" aria-label="編輯工地資訊">✎</button>
+    </div>
+
+    <nav class="subtabs" id="detail-subtabs">
+      <button class="subtab-btn active" data-subtab="log">日誌</button>
+      <button class="subtab-btn" data-subtab="gantt">進度</button>
+      <button class="subtab-btn" data-subtab="photos">照片</button>
+      <button class="subtab-btn" data-subtab="todos">待辦</button>
+      <button class="subtab-btn" data-subtab="report">報告</button>
+    </nav>
+
+    <div id="subtab-log" class="subtab-panel active">
+      <button id="add-log-btn" class="primary-btn full-width">＋ 新增施工日誌</button>
+      <div id="log-list" class="log-list"></div>
+      <div id="log-empty" class="empty-state hidden"><p>尚未有日誌紀錄</p></div>
+    </div>
+
+    <div id="subtab-gantt" class="subtab-panel">
+      <div class="gantt-scroll"><canvas id="detail-gantt-canvas"></canvas></div>
+      <p id="detail-gantt-stats" class="text-muted"></p>
+    </div>
+
+    <div id="subtab-photos" class="subtab-panel">
+      <div class="photo-actions">
+        <label class="primary-btn file-btn">📷 拍照 / 選擇照片
+          <input id="photo-input" type="file" accept="image/*" capture="environment" multiple hidden>
+        </label>
+      </div>
+      <div id="photo-grid" class="photo-grid"></div>
+      <div id="photo-empty" class="empty-state hidden"><p>尚未有照片</p></div>
+    </div>
+
+    <div id="subtab-todos" class="subtab-panel">
+      <form id="todo-form" class="todo-form">
+        <input id="todo-input" type="text" placeholder="輸入待辦事項...">
+        <label class="icon-btn file-btn" title="附加照片">📎
+          <input id="todo-photo-input" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+        <button type="submit" class="primary-btn">新增</button>
+      </form>
+      <p id="todo-photo-pending" class="text-muted hidden"></p>
+      <div id="todo-list" class="todo-list"></div>
+      <div id="todo-empty" class="empty-state hidden"><p>尚未有待辦事項</p></div>
+    </div>
+
+    <div id="subtab-report" class="subtab-panel">
+      <div class="card">
+        <label class="checkbox-row"><input type="checkbox" id="report-include-log" checked> 施工日誌</label>
+        <label class="checkbox-row"><input type="checkbox" id="report-include-attendance" checked> 人員出勤統計</label>
+        <label class="checkbox-row"><input type="checkbox" id="report-include-gantt" checked> 進度甘特圖</label>
+        <label class="checkbox-row"><input type="checkbox" id="report-include-todos" checked> 待辦事項</label>
+        <label class="checkbox-row"><input type="checkbox" id="report-include-photos" checked> 工地照片</label>
+      </div>
+      <button id="export-full-report-btn" class="primary-btn full-width">匯出完整施工報告 (PDF)</button>
+      <button id="export-photo-report-btn" class="secondary-btn full-width">只匯出照片報告 (PDF)</button>
+      <p id="report-status" class="text-muted"></p>
+    </div>
+  </section>
+</main>
+
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="nav-btn active" data-view="projects"><span class="nav-icon">🏗️</span><span>總覽</span></button>
+  <button class="nav-btn" data-view="gantt"><span class="nav-icon">📊</span><span>甘特圖</span></button>
+  <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span><span>設定</span></button>
+</nav>
+
+<!-- Modals -->
+<div id="modal-backdrop" class="modal-backdrop hidden"></div>
+
+<div id="project-form-modal" class="modal hidden">
+  <div class="modal-card">
+    <h3 id="project-form-title">新增工地</h3>
+    <form id="project-form">
+      <label for="project-name-input">工地名稱</label>
+      <input id="project-name-input" type="text" required>
+      <label for="project-address-input">地址</label>
+      <input id="project-address-input" type="text">
+      <label for="project-status-input">狀態</label>
+      <select id="project-status-input">
+        <option value="not_started">未開始</option>
+        <option value="in_progress">進行中</option>
+        <option value="done">已完成</option>
+      </select>
+      <div class="date-row">
+        <div>
+          <label for="project-start-input">預排開工日</label>
+          <input id="project-start-input" type="date">
+        </div>
+        <div>
+          <label for="project-end-input">預排完工日</label>
+          <input id="project-end-input" type="date">
+        </div>
+      </div>
+      <label for="project-note-input">備註</label>
+      <textarea id="project-note-input" rows="2"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="project-delete-btn" class="danger-btn hidden">刪除工地</button>
+        <button type="button" id="project-cancel-btn" class="secondary-btn">取消</button>
+        <button type="submit" class="primary-btn">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="log-form-modal" class="modal hidden">
+  <div class="modal-card">
+    <h3 id="log-form-title">施工日誌</h3>
+    <form id="log-form">
+      <label for="log-date-input">日期</label>
+      <input id="log-date-input" type="date" required>
+      <label for="log-personnel-input">出工人員（逗號分隔）</label>
+      <input id="log-personnel-input" type="text" placeholder="例如：阿明, 阿華, 小林">
+      <label for="log-weather-input">實際天氣</label>
+      <select id="log-weather-input">
+        <option value="">選擇天氣</option>
+        <option value="☀️ 晴天">☀️ 晴天</option>
+        <option value="⛅ 多雲">⛅ 多雲</option>
+        <option value="☁️ 陰天">☁️ 陰天</option>
+        <option value="🌦️ 小雨">🌦️ 小雨</option>
+        <option value="🌧️ 大雨">🌧️ 大雨</option>
+        <option value="🌀 颱風">🌀 颱風</option>
+      </select>
+      <label for="log-notes-input">重要事項</label>
+      <textarea id="log-notes-input" rows="3" placeholder="今日施工內容、異常狀況..."></textarea>
+      <div class="modal-actions">
+        <button type="button" id="log-delete-btn" class="danger-btn hidden">刪除</button>
+        <button type="button" id="log-cancel-btn" class="secondary-btn">取消</button>
+        <button type="submit" class="primary-btn">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="photo-editor-modal" class="modal photo-editor-modal hidden">
+  <div class="modal-card photo-editor-card">
+    <div class="photo-editor-header">
+      <button id="photo-editor-close-btn" class="icon-btn" aria-label="關閉">✕</button>
+      <span>標註照片（拖曳框選問題點）</span>
+      <button id="photo-editor-delete-btn" class="icon-btn" aria-label="刪除照片">🗑️</button>
+    </div>
+    <div class="photo-editor-canvas-wrap" id="photo-editor-canvas-wrap">
+      <img id="photo-editor-img" alt="">
+      <canvas id="photo-editor-canvas"></canvas>
+    </div>
+    <div id="annotation-list" class="annotation-list"></div>
+    <div class="modal-actions">
+      <input id="photo-caption-input" type="text" placeholder="照片說明（選填）">
+    </div>
+  </div>
+</div>
+
+<div id="annotation-note-modal" class="modal hidden">
+  <div class="modal-card">
+    <h3>標註備註</h3>
+    <textarea id="annotation-note-input" rows="3" placeholder="描述這個問題點..."></textarea>
+    <div class="modal-actions">
+      <button type="button" id="annotation-note-delete-btn" class="danger-btn">刪除標註</button>
+      <button type="button" id="annotation-note-cancel-btn" class="secondary-btn">取消</button>
+      <button type="button" id="annotation-note-save-btn" class="primary-btn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/gantt.js"></script>
+<script src="js/photos.js"></script>
+<script src="js/report.js"></script>
+<script src="js/projects.js"></script>
+<script src="js/dailylog.js"></script>
+<script src="js/todos.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
