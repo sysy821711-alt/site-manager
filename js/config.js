@@ -6,7 +6,9 @@ const AppConfig = {
   msal: {
     clientId: 'YOUR_AZURE_APP_CLIENT_ID',
     authority: 'https://login.microsoftonline.com/common', // 同時支援個人與公司/學校 Microsoft 帳號
-    redirectUri: window.location.origin + window.location.pathname
+    // 固定算成資料夾路徑（去掉 index.html），不管使用者是用 .../site-manager/ 還是
+    // .../site-manager/index.html 進入，redirectUri 都一致，才不會跟 Azure 登記的網址對不上
+    redirectUri: window.location.origin + window.location.pathname.replace(/index\.html$/, '')
   },
   // Files.ReadWrite.AppFolder：只存取這個 App 專屬的 OneDrive 資料夾，不會動到使用者其他檔案
   graphScopes: ['Files.ReadWrite.AppFolder', 'offline_access', 'User.Read']
