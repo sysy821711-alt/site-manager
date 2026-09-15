@@ -1,4 +1,4 @@
-const CACHE_NAME = 'site-manager-v1';
+const CACHE_NAME = 'site-manager-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -15,7 +15,6 @@ const APP_SHELL = [
   './js/dailylog.js',
   './js/todos.js',
   './js/app.js',
-  './icons/icon.svg',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png'
