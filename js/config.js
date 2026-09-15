@@ -4,7 +4,7 @@
 // 在填入真實 clientId 之前，OneDrive 同步功能會停用，其餘功能完全不受影響（純本機使用）。
 const AppConfig = {
   msal: {
-    clientId: 'YOUR_AZURE_APP_CLIENT_ID',
+    clientId: 'E7FC7BF2-9D5A-48E6-95C1-58AC119AD3C9',
     authority: 'https://login.microsoftonline.com/common', // 同時支援個人與公司/學校 Microsoft 帳號
     // 固定算成資料夾路徑（去掉 index.html），不管使用者是用 .../site-manager/ 還是
     // .../site-manager/index.html 進入，redirectUri 都一致，才不會跟 Azure 登記的網址對不上
