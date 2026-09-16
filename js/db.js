@@ -303,7 +303,6 @@ const DB = (() => {
       done: false,
       photoId: photoId || null,
       dueDate: dueDate || null,
-      includeInReport: true,
       createdAt: now,
       updatedAt: now
     };

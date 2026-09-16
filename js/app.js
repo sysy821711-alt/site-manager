@@ -447,7 +447,6 @@ const App = (() => {
           includeLog: document.getElementById('report-include-log').checked,
           includeAttendance: document.getElementById('report-include-attendance').checked,
           includeGantt: document.getElementById('report-include-gantt').checked,
-          includeTodos: document.getElementById('report-include-todos').checked,
           includePhotos: document.getElementById('report-include-photos').checked
         };
         doc = await Report.generate(project, opts);

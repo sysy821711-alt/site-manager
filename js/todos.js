@@ -49,17 +49,6 @@ const Todos = (() => {
       item.appendChild(checkbox);
       item.appendChild(main);
 
-      const reportToggle = document.createElement('input');
-      reportToggle.type = 'checkbox';
-      reportToggle.checked = todo.includeInReport !== false;
-      reportToggle.title = '納入施工報告';
-      reportToggle.setAttribute('aria-label', '納入施工報告');
-      reportToggle.addEventListener('change', async () => {
-        await DB.updateTodo(todo.id, { includeInReport: reportToggle.checked });
-        App.notifyDataChanged();
-      });
-      item.appendChild(reportToggle);
-
       if (todo.photoId) {
         const photo = photosById.get(todo.photoId);
         if (photo) {

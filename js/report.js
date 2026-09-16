@@ -204,20 +204,6 @@ const Report = (() => {
     });
   }
 
-  // ---------- 待辦事項 ----------
-  function drawTodos(ctx, todos) {
-    if (!todos.length) {
-      ctx.y = drawParagraph(ctx.page, ctx.font, '（尚無待辦事項）', MARGIN, ctx.y, CONTENT_W, 10, 14, COLOR.muted);
-      return;
-    }
-    todos.forEach((todo) => {
-      ctx.ensureSpace(20, '待辦事項（續）');
-      const mark = todo.done ? '[x]' : '[ ]';
-      drawText(ctx.page, ctx.font, `${mark}  ${todo.text}`, MARGIN + 4, ctx.y, 11, todo.done ? COLOR.muted : COLOR.text);
-      ctx.y -= 20;
-    });
-  }
-
   // canvas -> bytes：用 toBlob 而不是 fetch(data:URL)，避免嚴格 CSP 環境擋掉 data: 請求
   function canvasToBlob(canvas, type, quality) {
     return new Promise((resolve, reject) => {
@@ -442,12 +428,6 @@ const Report = (() => {
       ctx.newPage();
       ctx.heading('進度甘特圖');
       await drawGanttSection(ctx, await DB.getDailyLogs(project.id));
-    }
-    if (opts.includeTodos) {
-      ctx.newPage();
-      ctx.heading('待辦事項');
-      const todos = (await DB.getTodos(project.id)).filter((t) => t.includeInReport !== false);
-      drawTodos(ctx, todos);
     }
     if (opts.includePhotos) {
       ctx.newPage();
