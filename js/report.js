@@ -4,8 +4,8 @@
 const Report = (() => {
   const { rgb } = window.PDFLib;
 
-  const PAGE_W = 595.28; // A4 直向，pt
-  const PAGE_H = 841.89;
+  const PAGE_W = 841.89; // A4 橫向，pt
+  const PAGE_H = 595.28;
   const MARGIN = 42;
   const CONTENT_W = PAGE_W - MARGIN * 2;
 
@@ -234,7 +234,7 @@ const Report = (() => {
   async function drawGanttSection(ctx, logs) {
     const rows = Gantt.buildRows([ctx.project], { [ctx.project.id]: logs });
     const canvas = document.createElement('canvas');
-    const drawn = Gantt.draw(canvas, rows, { width: 900, rowHeight: 60 });
+    const drawn = Gantt.draw(canvas, rows, { width: 1300, rowHeight: 60 });
     if (drawn) {
       const pngBytes = await canvasToPngBytes(canvas);
       const img = await ctx.pdfDoc.embedPng(pngBytes);
@@ -249,16 +249,14 @@ const Report = (() => {
     const ps = ctx.project.plannedStart ? new Date(ctx.project.plannedStart + 'T00:00:00') : null;
     const pe = ctx.project.plannedEnd ? new Date(ctx.project.plannedEnd + 'T00:00:00') : null;
     const plannedDays = ps && pe ? Math.round((pe - ps) / 86400000) + 1 : null;
-    const actualDays = row ? row.actualDates.size : 0;
 
     const lines = [
       `預排工期：${ctx.project.plannedStart || '未定'} ~ ${ctx.project.plannedEnd || '未定'}${plannedDays ? `（共 ${plannedDays} 天）` : ''}`,
-      `實際到場天數：${actualDays} 天`,
       row && row.delayed ? '注意：進度落後於預排工期' : '目前進度正常'
     ];
     lines.forEach((line, i) => {
       ctx.ensureSpace(18);
-      drawText(ctx.page, ctx.font, line, MARGIN, ctx.y, 11, i === 2 && row && row.delayed ? COLOR.danger : COLOR.text);
+      drawText(ctx.page, ctx.font, line, MARGIN, ctx.y, 11, i === 1 && row && row.delayed ? COLOR.danger : COLOR.text);
       ctx.y -= 18;
     });
   }
@@ -302,8 +300,8 @@ const Report = (() => {
 
   // 直式相片 3欄x2列＝一頁6張，橫式相片 2欄x2列＝一頁4張；同一天的照片分在同一組，組間強制換頁
   const PHOTO_GRID = {
-    portrait: { cols: 3, rows: 2, cellW: 163, cellH: 220, gapX: 10, gapY: 20 },
-    landscape: { cols: 2, rows: 2, cellW: 248, cellH: 186, gapX: 14, gapY: 22 }
+    portrait: { cols: 3, rows: 2, cellW: 240, cellH: 190, gapX: 14, gapY: 22 },
+    landscape: { cols: 2, rows: 2, cellW: 365, cellH: 190, gapX: 18, gapY: 22 }
   };
 
   function orientationOf(w, h) {

@@ -164,7 +164,7 @@ const App = (() => {
     Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, rowHeight: 48 });
     const row = rows[0];
     const statsEl = document.getElementById('detail-gantt-stats');
-    statsEl.textContent = `實際到場 ${row.actualDates.size} 天${row.delayed ? '　⚠ 進度落後於預排工期' : ''}`;
+    statsEl.textContent = row.delayed ? '⚠ 進度落後於預排工期' : '目前進度正常';
     statsEl.classList.toggle('warning-text', row.delayed);
   }
 

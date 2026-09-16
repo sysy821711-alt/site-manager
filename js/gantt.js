@@ -95,13 +95,13 @@ const Gantt = (() => {
     if (!rows.length) return null;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rowH = opts.rowHeight || 38;
-    const labelW = opts.labelWidth || 92;
+    const labelW = opts.labelWidth || 118;
     const headerH = 24;
     const paddingR = 20;
     const width = Math.max(320, opts.width || canvas.clientWidth || 600);
     const { min, max } = computeRange(rows);
     const totalDays = Math.max(1, daysBetween(min, max));
-    const minDayW = 22;
+    const minDayW = 30; // 改成每天都顯示日期，欄位要留夠寬度放下文字
     const chartW = Math.max(width - labelW - paddingR, totalDays * minDayW);
     const dayW = chartW / totalDays;
     const fullWidth = labelW + chartW + paddingR;
@@ -117,24 +117,29 @@ const Gantt = (() => {
 
     const xOf = (d) => labelW + daysBetween(min, d) * dayW;
 
-    // 週格線
-    ctx.strokeStyle = '#E5E8EF';
-    ctx.fillStyle = '#7A8299';
+    // 每天一條格線＋日期標籤；月份變化才顯示「M/D」，同月份只顯示日數，避免擠成一團
     ctx.font = '11px sans-serif';
     ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
     ctx.lineWidth = 1;
+    let prevMonth = null;
     let cursor = new Date(min);
-    cursor.setDate(cursor.getDate() - cursor.getDay());
     while (cursor <= max) {
       const x = xOf(cursor);
       if (x >= labelW) {
+        const isWeekStart = cursor.getDay() === 0;
+        ctx.strokeStyle = isWeekStart ? '#C7CCDA' : '#EEF0F5';
         ctx.beginPath();
         ctx.moveTo(x, headerH);
         ctx.lineTo(x, height);
         ctx.stroke();
-        ctx.fillText(fmt(cursor), x + 3, headerH / 2);
+        const month = cursor.getMonth() + 1;
+        const label = month !== prevMonth ? fmt(cursor) : String(cursor.getDate());
+        ctx.fillStyle = '#7A8299';
+        ctx.fillText(label, x + dayW / 2, headerH / 2);
+        prevMonth = month;
       }
-      cursor = addDays(cursor, 7);
+      cursor = addDays(cursor, 1);
     }
 
     // 每列
@@ -144,8 +149,8 @@ const Gantt = (() => {
       ctx.fillStyle = '#1F2430';
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'left';
-      const name = r.project.name.length > 7 ? r.project.name.slice(0, 6) + '…' : r.project.name;
-      ctx.fillText(name, 4, cy);
+      const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
+      ctx.fillText(`${name}（${r.actualDates.size}天）`, 4, cy);
 
       const ps = parseDate(r.project.plannedStart);
       const pe = parseDate(r.project.plannedEnd);
