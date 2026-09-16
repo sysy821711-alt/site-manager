@@ -474,7 +474,11 @@ const Report = (() => {
 
   async function download(pdfDoc, filename) {
     const bytes = await pdfDoc.save();
-    const blob = new Blob([bytes], { type: 'application/pdf' });
+    // 用 application/octet-stream 而不是 application/pdf：Android Chrome 常會把
+    // pdf mime 的 blob 直接用內建 PDF 檢視器打開（介面看起來像「直接跳去預覽列印」），
+    // 而不是單純存檔。宣告成通用二進位檔就會強制走「下載」而不是「開啟預覽」，
+    // 檔名仍然是 .pdf，存下來後照樣是正常、可正確開啟的 PDF。
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

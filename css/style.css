@@ -267,7 +267,33 @@ label:first-child { margin-top: 0; }
 .card h3 { margin: 0 0 10px; font-size: 15px; }
 
 /* ---------- Gantt ---------- */
-.gantt-scroll { overflow-x: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
+/* 工地名稱固定在左邊、不隨橫向捲動移動；只有右邊的時間軸（.gantt-scroll）會捲動 */
+.gantt-wrap {
+  display: flex;
+  align-items: stretch;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.gantt-labels {
+  flex-shrink: 0;
+  width: 128px;
+  border-right: 1px solid var(--border);
+  padding: 6px 0;
+  overflow: hidden;
+}
+.gantt-label-row {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gantt-scroll { overflow-x: auto; flex: 1; padding: 6px 6px 6px 0; }
 #gantt-canvas, #detail-gantt-canvas { display: block; }
 
 /* ---------- Attendance ---------- */

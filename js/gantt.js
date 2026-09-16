@@ -95,12 +95,15 @@ const Gantt = (() => {
     ctx.closePath();
   }
 
-  // 畫到 canvas 上；rows 為空陣列時回傳 null
+  // 畫到 canvas 上；rows 為空陣列時回傳 null。
+  // includeLabels=false 時完全不畫左側名稱欄（畫面上用 renderLabels() 另外畫成固定不捲動的 DOM，
+  // 只有時間軸本身可以橫向捲動）；PDF report.js 仍用預設 true，把名稱和時間軸畫在同一張圖裡。
   function draw(canvas, rows, opts = {}) {
     if (!rows.length) return null;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rowH = opts.rowHeight || 38;
-    const labelW = opts.labelWidth || 128;
+    const includeLabels = opts.includeLabels !== false;
+    const labelW = includeLabels ? (opts.labelWidth || 128) : 0;
     const headerH = 24;
     const paddingR = 20;
     const width = Math.max(320, opts.width || canvas.clientWidth || 600);
@@ -151,11 +154,13 @@ const Gantt = (() => {
     rows.forEach((r, i) => {
       const y = headerH + i * rowH;
       const cy = y + rowH / 2;
-      ctx.fillStyle = '#1F2430';
-      ctx.font = '13px sans-serif';
-      ctx.textAlign = 'left';
-      const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
-      ctx.fillText(`${name}（${r.totalManDays}工）`, 4, cy);
+      if (includeLabels) {
+        ctx.fillStyle = '#1F2430';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'left';
+        const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
+        ctx.fillText(`${name}（${r.totalManDays}工）`, 4, cy);
+      }
 
       const ps = parseDate(r.project.plannedStart);
       const pe = parseDate(r.project.plannedEnd);
@@ -198,5 +203,25 @@ const Gantt = (() => {
     return { min, max, width: fullWidth, height };
   }
 
-  return { draw, buildRows, isBehindSchedule };
+  // 畫面上固定不捲動的名稱欄，用 DOM 而不是 canvas，才能跟旁邊會橫向捲動的時間軸 canvas 分開；
+  // rowHeight／headerHeight 要跟對應的 draw() 呼叫一致，兩邊的列高才會對齊。
+  function renderLabels(container, rows, opts = {}) {
+    if (!container) return;
+    const rowH = opts.rowHeight || 38;
+    const headerH = 24;
+    container.innerHTML = '';
+    const spacer = document.createElement('div');
+    spacer.style.height = headerH + 'px';
+    container.appendChild(spacer);
+    rows.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'gantt-label-row';
+      row.style.height = rowH + 'px';
+      const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
+      row.textContent = `${name}（${r.totalManDays}工）`;
+      container.appendChild(row);
+    });
+  }
+
+  return { draw, renderLabels, buildRows, isBehindSchedule };
 })();

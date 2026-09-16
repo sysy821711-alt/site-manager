@@ -34,36 +34,71 @@ const App = (() => {
     toastTimer = setTimeout(() => el.classList.add('hidden'), 2500);
   }
 
+  // ---------- Android/瀏覽器「返回」鍵：用 pushState 疊出一個虛擬的上一頁堆疊，
+  // 這樣手機的返回鍵／手勢會先關 modal、再從工地詳細退回列表，而不是直接關掉整個 App。
+  let historyDepth = 0;
+  function pushLayer() {
+    historyDepth += 1;
+    history.pushState({ appLayer: historyDepth }, '');
+  }
+  // 程式自己要「關掉最上層」時呼叫這個，而不是直接操作 DOM：
+  // 如果有疊層，交給 history.back() 觸發下面的 popstate 來實際執行；沒有疊層才直接做。
+  function requestCloseTopLayer() {
+    if (historyDepth > 0) history.back();
+    else closeTopLayerImmediate();
+  }
+  function closeTopLayerImmediate() {
+    const openModal = document.querySelector('.modal:not(.hidden)');
+    if (openModal) {
+      if (openModal.id === 'photo-editor-modal') Photos.closeEditor();
+      else hideModalImmediate(openModal.id);
+      return true;
+    }
+    if (state.view === 'detail') {
+      showView('projects');
+      Projects.renderList();
+      return true;
+    }
+    return false;
+  }
+  window.addEventListener('popstate', () => {
+    if (historyDepth > 0) historyDepth -= 1;
+    closeTopLayerImmediate();
+  });
+
   // ---------- Modal helpers ----------
   function showModal(id) {
     previouslyFocused = document.activeElement;
     document.getElementById('modal-backdrop').classList.remove('hidden');
     const modal = document.getElementById(id);
     modal.classList.remove('hidden');
+    pushLayer();
     requestAnimationFrame(() => {
       const focusable = modal.querySelector('input, select, textarea, button, [tabindex="0"]');
       if (focusable) focusable.focus();
     });
   }
-  function hideModal(id) {
+  function hideModalImmediate(id) {
     document.getElementById(id).classList.add('hidden');
     const stillOpen = document.querySelector('.modal:not(.hidden)');
     document.getElementById('modal-backdrop').classList.toggle('hidden', !stillOpen);
     if (!stillOpen && previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
   }
+  // 對外一律走這個：有疊層的話讓返回鍵的邏輯（popstate）去真正關閉，維持堆疊平衡
+  function hideModal(id) {
+    requestCloseTopLayer();
+  }
   function bindBackdrop() {
     document.getElementById('modal-backdrop').addEventListener('click', () => {
       const open = document.querySelector('.modal:not(.hidden)');
       if (!open) return;
-      if (open.id === 'photo-editor-modal') Photos.closeEditor();
-      else hideModal(open.id);
+      requestCloseTopLayer();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const open = Array.from(document.querySelectorAll('.modal:not(.hidden)')).pop();
       if (!open) return;
-      if (open.id === 'photo-editor-modal') Photos.closeEditor();
-      else hideModal(open.id);
+      requestCloseTopLayer();
     });
   }
 
@@ -103,9 +138,11 @@ const App = (() => {
   async function renderGanttOverview() {
     const projects = await DB.getProjects();
     const canvas = document.getElementById('gantt-canvas');
+    const labelsEl = document.getElementById('gantt-labels');
     const emptyEl = document.getElementById('gantt-empty');
     if (!projects.length) {
       emptyEl.classList.remove('hidden');
+      labelsEl.innerHTML = '';
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
@@ -114,7 +151,8 @@ const App = (() => {
     const dailyLogsByProject = {};
     for (const p of projects) dailyLogsByProject[p.id] = await DB.getDailyLogs(p.id);
     const rows = Gantt.buildRows(projects, dailyLogsByProject);
-    Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4 });
+    Gantt.renderLabels(labelsEl, rows);
+    Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, includeLabels: false });
   }
 
   // ---------- 工地詳細 ----------
@@ -122,6 +160,7 @@ const App = (() => {
     state.projectId = projectId;
     state.subtab = 'log';
     showView('detail');
+    pushLayer();
     await renderProjectDetail(projectId);
   }
 
@@ -161,7 +200,9 @@ const App = (() => {
     const logs = await DB.getDailyLogs(project.id);
     const rows = Gantt.buildRows([project], { [project.id]: logs });
     const canvas = document.getElementById('detail-gantt-canvas');
-    Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, rowHeight: 48 });
+    const labelsEl = document.getElementById('detail-gantt-labels');
+    Gantt.renderLabels(labelsEl, rows, { rowHeight: 48 });
+    Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, rowHeight: 48, includeLabels: false });
     const row = rows[0];
     const statsEl = document.getElementById('detail-gantt-stats');
     statsEl.textContent = row.delayed ? '⚠ 進度落後於預排工期' : '目前進度正常';
@@ -413,7 +454,7 @@ const App = (() => {
         refreshCurrentView();
       });
     });
-    document.getElementById('back-btn').addEventListener('click', goToProjectList);
+    document.getElementById('back-btn').addEventListener('click', () => requestCloseTopLayer());
     document.querySelectorAll('.subtab-btn').forEach((btn) => {
       btn.addEventListener('click', () => setSubtab(btn.dataset.subtab));
     });
@@ -431,7 +472,7 @@ const App = (() => {
     };
     document.getElementById('photo-input').addEventListener('change', onPhotoFilesChosen);
     document.getElementById('photo-camera-input').addEventListener('change', onPhotoFilesChosen);
-    document.getElementById('photo-editor-close-btn').addEventListener('click', () => Photos.closeEditor());
+    document.getElementById('photo-editor-close-btn').addEventListener('click', () => hideModal('photo-editor-modal'));
     document.getElementById('photo-editor-delete-btn').addEventListener('click', () => Photos.deleteCurrentPhoto());
   }
 
@@ -462,7 +503,7 @@ const App = (() => {
   document.addEventListener('DOMContentLoaded', init);
 
   return {
-    showModal, hideModal, statusLabel, toast,
+    showModal, hideModal, hideModalImmediate, statusLabel, toast,
     openProjectDetail, goToProjectList, refreshCurrentView, notifyDataChanged, refreshDetailGantt, refreshDetailAttendance
   };
 })();

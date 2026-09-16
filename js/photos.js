@@ -274,7 +274,7 @@ const Photos = (() => {
       DB.updatePhoto(state.photoId, { caption: captionInput.value }).then(() => App.notifyDataChanged());
     }
     const cb = state.onClose;
-    App.hideModal('photo-editor-modal');
+    App.hideModalImmediate('photo-editor-modal');
     if (state.imgEl && state.imgEl.src) URL.revokeObjectURL(state.imgEl.src);
     resetState();
     if (cb) cb();
@@ -285,7 +285,7 @@ const Photos = (() => {
     if (!confirm('確定要刪除這張照片嗎？')) return;
     await DB.deletePhoto(state.photoId);
     App.notifyDataChanged();
-    closeEditor();
+    App.hideModal('photo-editor-modal');
   }
 
   return { renderGrid, handleFiles, optimizeImage, openEditor, closeEditor, deleteCurrentPhoto, bindPointerEvents, loadImage };
