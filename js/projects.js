@@ -2,13 +2,27 @@
 const Projects = (() => {
   let currentFilter = 'all';
   let editingId = null;
+  let searchText = '';
+  let currentSort = 'updated';
 
   async function renderList() {
     const listEl = document.getElementById('project-list');
     const emptyEl = document.getElementById('project-empty');
     const all = await DB.getProjects();
     emptyEl.classList.toggle('hidden', all.length > 0);
-    const filtered = currentFilter === 'all' ? all : all.filter((p) => p.status === currentFilter);
+    const allLogs = await DB.getDailyLogs();
+    const logsByProject = new Map();
+    allLogs.forEach((log) => {
+      if (!logsByProject.has(log.projectId)) logsByProject.set(log.projectId, []);
+      logsByProject.get(log.projectId).push(log);
+    });
+    let filtered = currentFilter === 'archived' ? all.filter((p) => p.archived) : all.filter((p) => !p.archived && (currentFilter === 'all' || p.status === currentFilter));
+    if (searchText) filtered = filtered.filter((p) => `${p.name} ${p.address || ''}`.toLocaleLowerCase('zh-Hant').includes(searchText));
+    filtered.sort((a, b) => {
+      if (currentSort === 'name') return a.name.localeCompare(b.name, 'zh-Hant');
+      if (currentSort === 'start') return (a.plannedStart || '9999').localeCompare(b.plannedStart || '9999');
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
 
     listEl.innerHTML = '';
     if (!filtered.length && all.length) {
@@ -19,12 +33,14 @@ const Projects = (() => {
     }
 
     for (const p of filtered) {
-      const logs = await DB.getDailyLogs(p.id);
+      const logs = logsByProject.get(p.id) || [];
       const actualDates = new Set(logs.map((l) => l.date));
       const delayed = Gantt.isBehindSchedule({ project: p, actualDates });
 
       const card = document.createElement('div');
       card.className = 'project-card';
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
       const top = document.createElement('div');
       top.className = 'project-card-top';
       const h3 = document.createElement('h3');
@@ -55,6 +71,9 @@ const Projects = (() => {
       card.appendChild(meta);
 
       card.addEventListener('click', () => App.openProjectDetail(p.id));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); App.openProjectDetail(p.id); }
+      });
       listEl.appendChild(card);
     }
   }
@@ -68,6 +87,7 @@ const Projects = (() => {
     document.getElementById('project-start-input').value = project ? (project.plannedStart || '') : '';
     document.getElementById('project-end-input').value = project ? (project.plannedEnd || '') : '';
     document.getElementById('project-note-input').value = project ? (project.note || '') : '';
+    document.getElementById('project-archived-input').checked = !!(project && project.archived);
     document.getElementById('project-delete-btn').classList.toggle('hidden', !project);
     App.showModal('project-form-modal');
   }
@@ -80,8 +100,13 @@ const Projects = (() => {
       status: document.getElementById('project-status-input').value,
       plannedStart: document.getElementById('project-start-input').value || null,
       plannedEnd: document.getElementById('project-end-input').value || null,
-      note: document.getElementById('project-note-input').value.trim()
+      note: document.getElementById('project-note-input').value.trim(),
+      archived: document.getElementById('project-archived-input').checked
     };
+    if (data.plannedStart && data.plannedEnd && data.plannedEnd < data.plannedStart) {
+      App.toast('完工日不能早於開工日');
+      return;
+    }
     if (editingId) {
       await DB.updateProject(editingId, data);
     } else {
@@ -96,9 +121,15 @@ const Projects = (() => {
     if (!editingId) return;
     if (!confirm('確定要刪除這個工地嗎？相關的日誌、照片、待辦都會一併刪除。')) return;
     await DB.deleteProject(editingId);
+    const deletedId = editingId;
     App.hideModal('project-form-modal');
     App.notifyDataChanged();
     App.goToProjectList();
+    App.toast('工地已刪除', { label: '復原', run: async () => {
+      await DB.restoreProject(deletedId);
+      App.notifyDataChanged();
+      await App.goToProjectList();
+    } });
   }
 
   function setFilter(status) {
@@ -117,6 +148,14 @@ const Projects = (() => {
     document.getElementById('add-project-btn').addEventListener('click', () => openForm(null));
     document.querySelectorAll('#status-filter .filter-btn').forEach((btn) => {
       btn.addEventListener('click', () => setFilter(btn.dataset.status));
+    });
+    document.getElementById('project-search').addEventListener('input', (e) => {
+      searchText = e.target.value.trim().toLocaleLowerCase('zh-Hant');
+      renderList();
+    });
+    document.getElementById('project-sort').addEventListener('change', (e) => {
+      currentSort = e.target.value;
+      renderList();
     });
   }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'site-manager-v3';
+const CACHE_NAME = 'site-manager-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -16,18 +16,16 @@ const APP_SHELL = [
   './js/dailylog.js',
   './js/todos.js',
   './js/app.js',
+  './vendor/msal-browser.min.js',
+  './vendor/pdf-lib.min.js',
+  './vendor/fontkit.umd.min.js',
+  './fonts/NotoSansTC-Regular.ttf',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
-// 外部函式庫（MSAL、pdf-lib）與中文字型檔：非必要資源，快取失敗不該讓整個安裝失敗；
-// 字型檔有 7MB，特意不放進 APP_SHELL（避免拖慢安裝），第一次匯出報告時才會下載並快取。
-const OPTIONAL_SHELL = [
-  'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js',
-  'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js',
-  './fonts/NotoSansTC-Regular.ttf'
-];
+// 目前必要資源均隨 App 一起提供；保留選用清單供未來非關鍵資源使用。
+const OPTIONAL_SHELL = [];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -54,6 +52,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   // Microsoft Graph API 的請求絕不能被快取或攔截退回快取（會拿到過期/錯誤的資料）
   if (event.request.url.includes('graph.microsoft.com') || event.request.url.includes('login.microsoftonline.com')) return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request, { cache: 'no-store' })
       .then((response) => {

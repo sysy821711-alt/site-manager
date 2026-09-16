@@ -65,6 +65,11 @@ const DailyLog = (() => {
       weather: document.getElementById('log-weather-input').value,
       notes: document.getElementById('log-notes-input').value.trim()
     };
+    const sameDate = await DB.getDailyLogByDate(currentProjectId, data.date);
+    if (sameDate && sameDate.id !== editingId) {
+      App.toast('同一天已有施工日誌，請編輯既有紀錄');
+      return;
+    }
     if (editingId) {
       await DB.updateDailyLog(editingId, data);
     } else {

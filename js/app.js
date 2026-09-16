@@ -1,6 +1,7 @@
 // App 殼層：畫面導覽、彈窗控制、跨模組串接
 const App = (() => {
   const state = { view: 'projects', projectId: null, subtab: 'log' };
+  let previouslyFocused = null;
 
   const VIEW_IDS = {
     projects: 'view-projects',
@@ -17,9 +18,17 @@ const App = (() => {
 
   // ---------- Toast ----------
   let toastTimer = null;
-  function toast(msg) {
+  function toast(msg, action) {
     const el = document.getElementById('toast');
-    el.textContent = msg;
+    el.replaceChildren(document.createTextNode(msg));
+    if (action && action.label && action.run) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'toast-action';
+      button.textContent = action.label;
+      button.addEventListener('click', async () => { clearTimeout(toastTimer); await action.run(); el.classList.add('hidden'); });
+      el.appendChild(button);
+    }
     el.classList.remove('hidden');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.add('hidden'), 2500);
@@ -27,16 +36,31 @@ const App = (() => {
 
   // ---------- Modal helpers ----------
   function showModal(id) {
+    previouslyFocused = document.activeElement;
     document.getElementById('modal-backdrop').classList.remove('hidden');
-    document.getElementById(id).classList.remove('hidden');
+    const modal = document.getElementById(id);
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      const focusable = modal.querySelector('input, select, textarea, button, [tabindex="0"]');
+      if (focusable) focusable.focus();
+    });
   }
   function hideModal(id) {
-    document.getElementById('modal-backdrop').classList.add('hidden');
     document.getElementById(id).classList.add('hidden');
+    const stillOpen = document.querySelector('.modal:not(.hidden)');
+    document.getElementById('modal-backdrop').classList.toggle('hidden', !stillOpen);
+    if (!stillOpen && previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
   }
   function bindBackdrop() {
     document.getElementById('modal-backdrop').addEventListener('click', () => {
       const open = document.querySelector('.modal:not(.hidden)');
+      if (!open) return;
+      if (open.id === 'photo-editor-modal') Photos.closeEditor();
+      else hideModal(open.id);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const open = Array.from(document.querySelectorAll('.modal:not(.hidden)')).pop();
       if (!open) return;
       if (open.id === 'photo-editor-modal') Photos.closeEditor();
       else hideModal(open.id);
@@ -70,6 +94,8 @@ const App = (() => {
 
   function notifyDataChanged() {
     Sync.scheduleSync();
+    updatePendingLabel();
+    updateStorageLabel();
   }
 
   // ---------- 甘特圖總覽（跨工地） ----------
@@ -170,6 +196,8 @@ const App = (() => {
       await updateSyncUI();
     });
     document.getElementById('sync-now-btn').addEventListener('click', () => Sync.syncNow());
+    document.getElementById('backup-export-btn').addEventListener('click', exportBackup);
+    document.getElementById('backup-import-input').addEventListener('change', importBackup);
 
     Sync.onStatusChange((status, err) => {
       const btn = document.getElementById('sync-now-btn');
@@ -187,9 +215,62 @@ const App = (() => {
         refreshCurrentView();
         toast('已完成同步');
       }
+      updatePendingLabel();
     });
 
     await updateSyncUI();
+    await updateStorageLabel();
+    await updatePendingLabel();
+  }
+
+  async function updatePendingLabel() {
+    const el = document.getElementById('sync-pending');
+    if (!el) return;
+    const settings = await DB.getSettings();
+    const since = settings.lastSyncAt || 0;
+    const groups = await Promise.all([DB.getAllProjectsRaw(), DB.getAllDailyLogsRaw(), DB.getAllTodosRaw(), DB.getAllPhotosRaw()]);
+    const count = groups.flat().filter((item) => (item.updatedAt || 0) > since || (item.blob && !item.uploadedOnce && !item.deletedAt)).length;
+    el.textContent = Auth.getAccount() ? (count ? `尚有 ${count} 筆變更待同步` : '本機變更皆已同步') : '';
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes)) return '未知';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function updateStorageLabel() {
+    const el = document.getElementById('storage-usage');
+    if (!el) return;
+    const info = await DB.getStorageInfo();
+    el.textContent = info ? `已使用約 ${formatBytes(info.usage)}，可用配額 ${formatBytes(info.quota)}` : '此瀏覽器不提供儲存空間資訊';
+  }
+
+  async function exportBackup() {
+    try {
+      const data = await DB.exportBackup();
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `工地管理備份_${DB.toDateStr(new Date())}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('備份已匯出');
+    } catch (err) { showSyncError('備份失敗：' + (err.message || String(err))); }
+  }
+
+  async function importBackup(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const count = await DB.importBackup(data);
+      notifyDataChanged();
+      await refreshCurrentView();
+      toast(`已合併 ${count} 筆備份資料`);
+    } catch (err) { showSyncError('匯入失敗：' + (err.message || String(err))); }
   }
 
   function showSyncError(msg) {

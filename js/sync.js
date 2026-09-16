@@ -19,12 +19,20 @@ const Sync = (() => {
   async function ensureFolder(token, name) {
     const res = await graphFetch(`${APPROOT}:/${encodeURIComponent(name)}`, token, { method: 'GET' });
     if (res.status === 404) {
-      await graphFetch(`${APPROOT}/children`, token, {
+      const createRes = await graphFetch(`${APPROOT}/children`, token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
       });
+      if (!createRes.ok) throw new Error(`建立雲端資料夾失敗：HTTP ${createRes.status}`);
+    } else if (!res.ok) {
+      throw new Error(`檢查雲端資料夾失敗：HTTP ${res.status}`);
     }
+  }
+
+  async function deleteFile(token, path) {
+    const res = await graphFetch(`${APPROOT}:/${path}`, token, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) throw new Error(`刪除 ${path} 失敗：HTTP ${res.status}`);
   }
 
   async function uploadSmallFile(token, path, content, contentType) {
@@ -77,7 +85,24 @@ const Sync = (() => {
     const [projects, dailyLogs, todos, photosRaw] = await Promise.all([
       DB.getAllProjectsRaw(), DB.getAllDailyLogsRaw(), DB.getAllTodosRaw(), DB.getAllPhotosRaw()
     ]);
-    const photosMeta = photosRaw.map((p) => ({
+    const failed = [];
+    for (const p of photosRaw) {
+      try {
+        if (p.deletedAt) {
+          if (p.uploadedOnce) await deleteFile(token, `photos/${p.id}.jpg`);
+        } else if (!p.uploadedOnce) {
+          await uploadLargeFile(token, `photos/${p.id}.jpg`, p.blob);
+          await DB.markPhotoUploaded(p.id);
+        }
+      } catch (err) {
+        console.error('同步照片失敗', p.id, err);
+        failed.push(p.id);
+      }
+    }
+    if (failed.length) throw new Error(`${failed.length} 張照片同步失敗，稍後將自動重試`);
+
+    const latestPhotos = await DB.getAllPhotosRaw();
+    const photosMeta = latestPhotos.map((p) => ({
       id: p.id,
       projectId: p.projectId,
       dailyLogId: p.dailyLogId || null,
@@ -89,25 +114,15 @@ const Sync = (() => {
     }));
     const payload = { version: 1, exportedAt: Date.now(), projects, dailyLogs, todos, photos: photosMeta };
     await uploadSmallFile(token, 'data.json', JSON.stringify(payload), 'application/json');
-
-    const settings = await DB.getSettings();
-    const lastSync = settings.lastSyncAt || 0;
-    for (const p of photosRaw) {
-      if (p.deletedAt) continue;
-      if (p.uploadedOnce && (p.updatedAt || 0) <= lastSync) continue;
-      try {
-        await uploadLargeFile(token, `photos/${p.id}.jpg`, p.blob);
-        await DB.updatePhoto(p.id, { uploadedOnce: true });
-      } catch (err) {
-        console.error('上傳照片失敗', p.id, err);
-      }
-    }
   }
 
   async function pullData(token) {
     const res = await downloadFile(token, 'data.json');
     if (!res) return;
     const remote = await res.json();
+    if (!remote || remote.version !== 1 || !Array.isArray(remote.projects) || !Array.isArray(remote.dailyLogs) || !Array.isArray(remote.todos) || !Array.isArray(remote.photos)) {
+      throw new Error('OneDrive 上的同步資料格式不正確');
+    }
 
     for (const p of (remote.projects || [])) await DB.mergeRecord('projects', p);
     for (const l of (remote.dailyLogs || [])) await DB.mergeRecord('dailyLogs', l);
@@ -131,8 +146,8 @@ const Sync = (() => {
   }
 
   async function syncNow() {
-    if (syncing) return;
-    if (!Auth.getAccount()) return;
+    if (syncing) return false;
+    if (!Auth.getAccount()) return false;
     syncing = true;
     emitStatus('syncing');
     try {
@@ -142,9 +157,11 @@ const Sync = (() => {
       await pushData(token);
       await DB.updateSettings({ lastSyncAt: Date.now() });
       emitStatus('success');
+      return true;
     } catch (err) {
       console.error('同步失敗', err);
       emitStatus('error', err);
+      return false;
     } finally {
       syncing = false;
     }

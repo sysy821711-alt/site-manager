@@ -1,6 +1,8 @@
 // 工地照片：縮圖格線、拍照/選檔上傳、canvas 框選標註（非破壞性，原圖 Blob 不變）
 const Photos = (() => {
   let state = null;
+  let gridUrls = [];
+  let captionTimer = null;
 
   function resetState() {
     state = {
@@ -38,16 +40,24 @@ const Photos = (() => {
     const grid = document.getElementById('photo-grid');
     const empty = document.getElementById('photo-empty');
     if (!grid) return;
+    gridUrls.forEach((url) => URL.revokeObjectURL(url));
+    gridUrls = [];
     const photos = await DB.getPhotos(projectId);
     grid.innerHTML = '';
     empty.classList.toggle('hidden', photos.length > 0);
     photos.forEach((p) => {
       const url = URL.createObjectURL(p.blob);
+      gridUrls.push(url);
       const cell = document.createElement('div');
       cell.className = 'photo-cell';
+      cell.tabIndex = 0;
+      cell.setAttribute('role', 'button');
       const count = (p.annotations || []).length;
       cell.innerHTML = `<img src="${url}" alt="工地照片">${count ? `<span class="photo-badge">${count}</span>` : ''}`;
       cell.addEventListener('click', () => openEditor(p.id, () => renderGrid(projectId)));
+      cell.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor(p.id, () => renderGrid(projectId)); }
+      });
       grid.appendChild(cell);
     });
   }
@@ -56,9 +66,28 @@ const Photos = (() => {
     const files = Array.from(fileList || []);
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
-      await DB.addPhoto({ projectId, blob: file, caption: '' });
+      if (file.size > 25 * 1024 * 1024) { App.toast(`${file.name} 超過 25 MB，已略過`); continue; }
+      const blob = await optimizeImage(file);
+      await DB.addPhoto({ projectId, blob, caption: '' });
     }
     await renderGrid(projectId);
+  }
+
+  async function optimizeImage(file) {
+    const sourceUrl = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(sourceUrl);
+      const maxSide = 2560;
+      const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      if (scale === 1 && file.size <= 4 * 1024 * 1024) return file;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('照片壓縮失敗')), 'image/jpeg', 0.86));
+    } finally {
+      URL.revokeObjectURL(sourceUrl);
+    }
   }
 
   // ---------- 標註編輯器 ----------
@@ -75,7 +104,11 @@ const Photos = (() => {
     const captionInput = document.getElementById('photo-caption-input');
     captionInput.value = photo.caption || '';
     captionInput.oninput = () => {
-      DB.updatePhoto(photoId, { caption: captionInput.value });
+      clearTimeout(captionTimer);
+      captionTimer = setTimeout(async () => {
+        await DB.updatePhoto(photoId, { caption: captionInput.value });
+        App.notifyDataChanged();
+      }, 450);
     };
 
     const url = URL.createObjectURL(photo.blob);
@@ -196,6 +229,7 @@ const Photos = (() => {
         state.pendingBox = null;
       }
       await DB.updatePhoto(state.photoId, { annotations: state.annotations });
+      App.notifyDataChanged();
       App.hideModal('annotation-note-modal');
       redraw();
       renderAnnotationList();
@@ -208,6 +242,7 @@ const Photos = (() => {
     deleteBtn.onclick = async () => {
       state.annotations = state.annotations.filter((a) => a.id !== existingAnnotationId);
       await DB.updatePhoto(state.photoId, { annotations: state.annotations });
+      App.notifyDataChanged();
       App.hideModal('annotation-note-modal');
       redraw();
       renderAnnotationList();
@@ -233,6 +268,11 @@ const Photos = (() => {
   }
 
   function closeEditor() {
+    clearTimeout(captionTimer);
+    const captionInput = document.getElementById('photo-caption-input');
+    if (state.photoId && captionInput) {
+      DB.updatePhoto(state.photoId, { caption: captionInput.value }).then(() => App.notifyDataChanged());
+    }
     const cb = state.onClose;
     App.hideModal('photo-editor-modal');
     if (state.imgEl && state.imgEl.src) URL.revokeObjectURL(state.imgEl.src);
@@ -244,8 +284,9 @@ const Photos = (() => {
     if (!state.photoId) return;
     if (!confirm('確定要刪除這張照片嗎？')) return;
     await DB.deletePhoto(state.photoId);
+    App.notifyDataChanged();
     closeEditor();
   }
 
-  return { renderGrid, handleFiles, openEditor, closeEditor, deleteCurrentPhoto, bindPointerEvents, loadImage };
+  return { renderGrid, handleFiles, optimizeImage, openEditor, closeEditor, deleteCurrentPhoto, bindPointerEvents, loadImage };
 })();

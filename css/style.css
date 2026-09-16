@@ -61,6 +61,10 @@ a { color: var(--primary); }
   color: var(--text);
 }
 .icon-btn:active { background: var(--bg); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="button"]:focus-visible {
+  outline: 3px solid rgba(58, 112, 214, 0.45);
+  outline-offset: 2px;
+}
 
 main {
   max-width: 520px;
@@ -136,6 +140,7 @@ label:first-child { margin-top: 0; }
 }
 
 /* ---------- Status filter ---------- */
+.project-tools { display: grid; grid-template-columns: 1fr 128px; gap: 8px; margin-bottom: 10px; }
 .status-filter {
   display: flex;
   gap: 8px;
@@ -414,6 +419,15 @@ label:first-child { margin-top: 0; }
   border-radius: 20px;
   font-size: 13px;
   z-index: 60;
+}
+.toast-action { border: 0; background: transparent; color: #FFD08A; font: inherit; font-weight: 700; margin-left: 12px; cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+
+@media (max-width: 380px) {
+  .project-tools { grid-template-columns: 1fr; }
 }
 
 /* ---------- Bottom nav ---------- */

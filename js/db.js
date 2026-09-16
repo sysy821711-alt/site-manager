@@ -8,7 +8,7 @@ const DB = (() => {
   let dbPromise = null;
 
   function uid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   }
 
   function pad2(n) { return String(n).padStart(2, '0'); }
@@ -70,8 +70,23 @@ const DB = (() => {
   }
 
   async function put(storeName, value) {
-    await promisifyRequest((await store(storeName, 'readwrite')).put(value));
+    try {
+      await promisifyRequest((await store(storeName, 'readwrite')).put(value));
+    } catch (err) {
+      if (err && (err.name === 'QuotaExceededError' || err.name === 'UnknownError')) {
+        throw new Error('裝置儲存空間不足，請先匯出備份並移除不需要的照片');
+      }
+      throw err;
+    }
     return value;
+  }
+
+  function txDone(tx) {
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('資料庫交易已中止'));
+    });
   }
 
   // ---------- Projects ----------
@@ -110,7 +125,46 @@ const DB = (() => {
   }
 
   async function deleteProject(id) {
-    await updateProject(id, { deletedAt: Date.now() });
+    const db = await openDB();
+    const tx = db.transaction(['projects', 'dailyLogs', 'photos', 'todos'], 'readwrite');
+    const now = Date.now();
+    const projectStore = tx.objectStore('projects');
+    const project = await promisifyRequest(projectStore.get(id));
+    if (!project) return false;
+    projectStore.put(Object.assign({}, project, { deletedAt: now, cascadeDeletedAt: now, updatedAt: now }));
+    for (const storeName of ['dailyLogs', 'photos', 'todos']) {
+      const targetStore = tx.objectStore(storeName);
+      const records = await promisifyRequest(targetStore.index('projectId').getAll(id));
+      records.forEach((record) => targetStore.put(Object.assign({}, record, { deletedAt: now, cascadeDeletedAt: now, updatedAt: now })));
+    }
+    await txDone(tx);
+    return true;
+  }
+
+  async function restoreProject(id) {
+    const db = await openDB();
+    const tx = db.transaction(['projects', 'dailyLogs', 'photos', 'todos'], 'readwrite');
+    const now = Date.now();
+    const projectStore = tx.objectStore('projects');
+    const project = await promisifyRequest(projectStore.get(id));
+    if (!project || !project.cascadeDeletedAt) return false;
+    const cascadeDeletedAt = project.cascadeDeletedAt;
+    const restoredProject = Object.assign({}, project, { updatedAt: now });
+    delete restoredProject.deletedAt;
+    delete restoredProject.cascadeDeletedAt;
+    projectStore.put(restoredProject);
+    for (const storeName of ['dailyLogs', 'photos', 'todos']) {
+      const targetStore = tx.objectStore(storeName);
+      const records = await promisifyRequest(targetStore.index('projectId').getAll(id));
+      records.filter((record) => record.cascadeDeletedAt === cascadeDeletedAt).forEach((record) => {
+        const restored = Object.assign({}, record, { updatedAt: now });
+        delete restored.deletedAt;
+        delete restored.cascadeDeletedAt;
+        targetStore.put(restored);
+      });
+    }
+    await txDone(tx);
+    return true;
   }
 
   // ---------- Daily logs ----------
@@ -186,6 +240,14 @@ const DB = (() => {
     const photo = await getPhoto(id);
     if (!photo) return null;
     const updated = Object.assign({}, photo, patch, { updatedAt: Date.now() });
+    await put('photos', updated);
+    return updated;
+  }
+
+  async function markPhotoUploaded(id) {
+    const photo = await getPhoto(id);
+    if (!photo) return null;
+    const updated = Object.assign({}, photo, { uploadedOnce: true });
     await put('photos', updated);
     return updated;
   }
@@ -266,6 +328,71 @@ const DB = (() => {
     return updated;
   }
 
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null;
+    const parts = dataUrl.split(',');
+    const type = (parts[0].match(/^data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const bytes = atob(parts[1] || '');
+    const array = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i += 1) array[i] = bytes.charCodeAt(i);
+    return new Blob([array], { type });
+  }
+
+  async function exportBackup() {
+    const [projects, dailyLogs, todos, photos, settings] = await Promise.all([
+      getAllProjectsRaw(), getAllDailyLogsRaw(), getAllTodosRaw(), getAllPhotosRaw(), getSettings()
+    ]);
+    const photosWithData = [];
+    for (const photo of photos) {
+      photosWithData.push(Object.assign({}, photo, { blob: undefined, dataUrl: await blobToDataUrl(photo.blob) }));
+    }
+    return { format: 'site-manager-backup', version: 1, exportedAt: Date.now(), projects, dailyLogs, todos, photos: photosWithData, settings };
+  }
+
+  function validateBackup(data) {
+    if (!data || data.format !== 'site-manager-backup' || data.version !== 1) throw new Error('不是有效的工地管理備份檔');
+    for (const key of ['projects', 'dailyLogs', 'todos', 'photos']) {
+      if (!Array.isArray(data[key])) throw new Error(`備份缺少 ${key} 資料`);
+      if (data[key].some((item) => !item || typeof item.id !== 'string')) throw new Error(`${key} 含有無效資料`);
+    }
+    return true;
+  }
+
+  async function importBackup(data) {
+    validateBackup(data);
+    let count = 0;
+    for (const p of data.projects) { await mergeRecord('projects', p); count += 1; }
+    for (const l of data.dailyLogs) { await mergeRecord('dailyLogs', l); count += 1; }
+    for (const t of data.todos) { await mergeRecord('todos', t); count += 1; }
+    for (const p of data.photos) {
+      const blob = dataUrlToBlob(p.dataUrl);
+      if (!blob) throw new Error(`照片 ${p.id} 缺少影像資料`);
+      const clean = Object.assign({}, p, { blob, uploadedOnce: false });
+      delete clean.dataUrl;
+      await mergeRecord('photos', clean);
+      count += 1;
+    }
+    if (data.settings && typeof data.settings === 'object') {
+      await updateSettings({ companyName: String(data.settings.companyName || '') });
+    }
+    return count;
+  }
+
+  async function getStorageInfo() {
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    return navigator.storage.estimate();
+  }
+
   // ---------- 供同步使用：含已刪除項目的完整讀寫 ----------
   async function getAllProjectsRaw() { return getAllRaw('projects'); }
   async function getAllDailyLogsRaw() { return getAllRaw('dailyLogs'); }
@@ -283,12 +410,12 @@ const DB = (() => {
 
   return {
     STATUS, uid, toDateStr,
-    getProjects, getProject, addProject, updateProject, deleteProject,
+    getProjects, getProject, addProject, updateProject, deleteProject, restoreProject,
     getDailyLogs, getDailyLog, getDailyLogByDate, addDailyLog, updateDailyLog, deleteDailyLog,
-    getPhotos, getPhoto, addPhoto, updatePhoto, deletePhoto,
+    getPhotos, getPhoto, addPhoto, updatePhoto, markPhotoUploaded, deletePhoto,
     addAnnotation, updateAnnotation, deleteAnnotation,
     getTodos, getTodo, addTodo, updateTodo, deleteTodo,
-    getSettings, updateSettings,
+    getSettings, updateSettings, exportBackup, importBackup, validateBackup, getStorageInfo,
     getAllProjectsRaw, getAllDailyLogsRaw, getAllTodosRaw, getAllPhotosRaw, mergeRecord
   };
 })();

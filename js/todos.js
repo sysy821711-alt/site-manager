@@ -2,12 +2,16 @@
 const Todos = (() => {
   let currentProjectId = null;
   let pendingPhotoFile = null;
+  let thumbUrls = [];
 
   async function renderList(projectId) {
     currentProjectId = projectId;
     const listEl = document.getElementById('todo-list');
     const emptyEl = document.getElementById('todo-empty');
-    const todos = await DB.getTodos(projectId);
+    thumbUrls.forEach((url) => URL.revokeObjectURL(url));
+    thumbUrls = [];
+    const [todos, photos] = await Promise.all([DB.getTodos(projectId), DB.getPhotos(projectId)]);
+    const photosById = new Map(photos.map((photo) => [photo.id, photo]));
     emptyEl.classList.toggle('hidden', todos.length > 0);
     listEl.innerHTML = '';
 
@@ -31,13 +35,31 @@ const Todos = (() => {
       item.appendChild(checkbox);
       item.appendChild(textEl);
 
+      const reportToggle = document.createElement('input');
+      reportToggle.type = 'checkbox';
+      reportToggle.checked = todo.includeInReport !== false;
+      reportToggle.title = '納入施工報告';
+      reportToggle.setAttribute('aria-label', '納入施工報告');
+      reportToggle.addEventListener('change', async () => {
+        await DB.updateTodo(todo.id, { includeInReport: reportToggle.checked });
+        App.notifyDataChanged();
+      });
+      item.appendChild(reportToggle);
+
       if (todo.photoId) {
-        const photo = await DB.getPhoto(todo.photoId);
+        const photo = photosById.get(todo.photoId);
         if (photo) {
           const thumb = document.createElement('img');
           thumb.className = 'todo-thumb';
           thumb.src = URL.createObjectURL(photo.blob);
+          thumbUrls.push(thumb.src);
+          thumb.tabIndex = 0;
+          thumb.setAttribute('role', 'button');
+          thumb.setAttribute('aria-label', '開啟待辦照片');
           thumb.addEventListener('click', () => Photos.openEditor(photo.id));
+          thumb.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); Photos.openEditor(photo.id); }
+          });
           item.appendChild(thumb);
         }
       }
@@ -47,10 +69,23 @@ const Todos = (() => {
       deleteBtn.setAttribute('aria-label', '刪除待辦');
       deleteBtn.textContent = '✕';
       deleteBtn.addEventListener('click', async () => {
+        if (!confirm('確定要刪除這筆待辦嗎？')) return;
         await DB.deleteTodo(todo.id);
         App.notifyDataChanged();
         renderList(currentProjectId);
       });
+      const editBtn = document.createElement('button');
+      editBtn.className = 'icon-btn todo-delete-btn';
+      editBtn.setAttribute('aria-label', '編輯待辦');
+      editBtn.textContent = '✎';
+      editBtn.addEventListener('click', async () => {
+        const next = prompt('編輯待辦事項', todo.text);
+        if (next == null || !next.trim()) return;
+        await DB.updateTodo(todo.id, { text: next.trim() });
+        App.notifyDataChanged();
+        renderList(currentProjectId);
+      });
+      item.appendChild(editBtn);
       item.appendChild(deleteBtn);
 
       listEl.appendChild(item);
@@ -78,7 +113,8 @@ const Todos = (() => {
 
     let photoId = null;
     if (pendingPhotoFile) {
-      const photo = await DB.addPhoto({ projectId: currentProjectId, blob: pendingPhotoFile, caption: text });
+      const blob = await Photos.optimizeImage(pendingPhotoFile);
+      const photo = await DB.addPhoto({ projectId: currentProjectId, blob, caption: text });
       photoId = photo.id;
     }
     await DB.addTodo({ projectId: currentProjectId, text, photoId });

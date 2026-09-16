@@ -8,6 +8,9 @@ const Auth = (() => {
   }
 
   function getInstance() {
+    if (!window.msal || !window.msal.PublicClientApplication) {
+      throw new Error('Microsoft 登入元件尚未載入；其他本機功能仍可正常使用');
+    }
     if (!msalInstance) {
       msalInstance = new msal.PublicClientApplication({
         auth: {
@@ -15,7 +18,7 @@ const Auth = (() => {
           authority: AppConfig.msal.authority,
           redirectUri: AppConfig.msal.redirectUri
         },
-        cache: { cacheLocation: 'localStorage' }
+        cache: { cacheLocation: 'sessionStorage' }
       });
     }
     return msalInstance;
@@ -23,7 +26,13 @@ const Auth = (() => {
 
   async function init() {
     if (!isConfigured()) return null;
-    const instance = getInstance();
+    let instance;
+    try {
+      instance = getInstance();
+    } catch (e) {
+      console.warn(e.message);
+      return null;
+    }
     await instance.initialize();
     let response = null;
     try {

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://*.sharepoint.com https://*.1drv.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>工地管理</title>
 <meta name="theme-color" content="#E8862E">
 <link rel="manifest" href="manifest.json">
@@ -21,11 +22,20 @@
 <main>
   <!-- 專案總覽 -->
   <section id="view-projects" class="view active">
+    <div class="project-tools">
+      <input id="project-search" type="search" placeholder="搜尋工地名稱或地址" aria-label="搜尋工地">
+      <select id="project-sort" aria-label="工地排序">
+        <option value="updated">最近更新</option>
+        <option value="name">名稱</option>
+        <option value="start">開工日期</option>
+      </select>
+    </div>
     <div class="status-filter" id="status-filter">
       <button class="filter-btn active" data-status="all">全部</button>
       <button class="filter-btn" data-status="not_started">未開始</button>
       <button class="filter-btn" data-status="in_progress">進行中</button>
       <button class="filter-btn" data-status="done">已完成</button>
+      <button class="filter-btn" data-status="archived">已封存</button>
     </div>
     <div id="project-list" class="project-list"></div>
     <div id="project-empty" class="empty-state hidden">
@@ -57,7 +67,17 @@
       <button id="onedrive-logout-btn" class="secondary-btn full-width hidden">登出</button>
       <button id="sync-now-btn" class="secondary-btn full-width hidden">立即同步</button>
       <p id="sync-last-time" class="text-muted"></p>
+      <p id="sync-pending" class="text-muted" aria-live="polite"></p>
       <p id="sync-error" class="error-text hidden"></p>
+    </div>
+    <div class="card">
+      <h3>備份與儲存空間</h3>
+      <p id="storage-usage" class="text-muted">正在計算儲存空間…</p>
+      <button id="backup-export-btn" class="secondary-btn full-width">匯出完整備份</button>
+      <label class="secondary-btn full-width file-btn">匯入備份
+        <input id="backup-import-input" type="file" accept="application/json,.json" hidden>
+      </label>
+      <p class="text-muted">匯入會以較新的紀錄合併，不會先清除現有資料。</p>
     </div>
     <div class="card">
       <h3>關於</h3>
@@ -150,7 +170,7 @@
 <!-- Modals -->
 <div id="modal-backdrop" class="modal-backdrop hidden"></div>
 
-<div id="project-form-modal" class="modal hidden">
+<div id="project-form-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
   <div class="modal-card">
     <h3 id="project-form-title">新增工地</h3>
     <form id="project-form">
@@ -176,6 +196,7 @@
       </div>
       <label for="project-note-input">備註</label>
       <textarea id="project-note-input" rows="2"></textarea>
+      <label class="checkbox-row"><input id="project-archived-input" type="checkbox"> 封存此工地</label>
       <div class="modal-actions">
         <button type="button" id="project-delete-btn" class="danger-btn hidden">刪除工地</button>
         <button type="button" id="project-cancel-btn" class="secondary-btn">取消</button>
@@ -185,7 +206,7 @@
   </div>
 </div>
 
-<div id="log-form-modal" class="modal hidden">
+<div id="log-form-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="log-form-title">
   <div class="modal-card">
     <h3 id="log-form-title">施工日誌</h3>
     <form id="log-form">
@@ -214,7 +235,7 @@
   </div>
 </div>
 
-<div id="photo-editor-modal" class="modal photo-editor-modal hidden">
+<div id="photo-editor-modal" class="modal photo-editor-modal hidden" role="dialog" aria-modal="true" aria-label="照片標註編輯器">
   <div class="modal-card photo-editor-card">
     <div class="photo-editor-header">
       <button id="photo-editor-close-btn" class="icon-btn" aria-label="關閉">✕</button>
@@ -232,9 +253,9 @@
   </div>
 </div>
 
-<div id="annotation-note-modal" class="modal hidden">
+<div id="annotation-note-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="annotation-note-title">
   <div class="modal-card">
-    <h3>標註備註</h3>
+    <h3 id="annotation-note-title">標註備註</h3>
     <textarea id="annotation-note-input" rows="3" placeholder="描述這個問題點..."></textarea>
     <div class="modal-actions">
       <button type="button" id="annotation-note-delete-btn" class="danger-btn">刪除標註</button>
@@ -244,11 +265,11 @@
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="vendor/msal-browser.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="vendor/fontkit.umd.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/auth.js"></script>
