@@ -96,8 +96,11 @@
 
     <div id="subtab-photos" class="subtab-panel">
       <div class="photo-actions">
-        <label class="primary-btn file-btn">📷 拍照 / 選擇照片
-          <input id="photo-input" type="file" accept="image/*" capture="environment" multiple hidden>
+        <label class="primary-btn file-btn">📷 拍照
+          <input id="photo-camera-input" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+        <label class="secondary-btn file-btn">🖼️ 從相簿／檔案選擇
+          <input id="photo-input" type="file" accept="image/*" multiple hidden>
         </label>
       </div>
       <div id="photo-grid" class="photo-grid"></div>

@@ -278,11 +278,13 @@ const App = (() => {
     document.getElementById('sync-status-btn').addEventListener('click', () => {
       showView('settings');
     });
-    document.getElementById('photo-input').addEventListener('change', async (e) => {
+    const onPhotoFilesChosen = async (e) => {
       await Photos.handleFiles(state.projectId, e.target.files);
       e.target.value = '';
       notifyDataChanged();
-    });
+    };
+    document.getElementById('photo-input').addEventListener('change', onPhotoFilesChosen);
+    document.getElementById('photo-camera-input').addEventListener('change', onPhotoFilesChosen);
     document.getElementById('photo-editor-close-btn').addEventListener('click', () => Photos.closeEditor());
     document.getElementById('photo-editor-delete-btn').addEventListener('click', () => Photos.deleteCurrentPhoto());
   }
