@@ -203,25 +203,37 @@ const Gantt = (() => {
     return { min, max, width: fullWidth, height };
   }
 
-  // 畫面上固定不捲動的名稱欄，用 DOM 而不是 canvas，才能跟旁邊會橫向捲動的時間軸 canvas 分開；
-  // rowHeight／headerHeight 要跟對應的 draw() 呼叫一致，兩邊的列高才會對齊。
-  function renderLabels(container, rows, opts = {}) {
-    if (!container) return;
+  // 畫面上固定不捲動的名稱欄：跟時間軸一樣畫在 canvas 上（而不是用 DOM），
+  // 用完全相同的 headerH／rowH 算法，確保每一列的垂直位置跟時間軸 canvas 逐像素對齊，
+  // 不會受不同瀏覽器的字型高度、box model 差異影響而跑掉（DOM 版本在 iOS Safari 上對不齊過）。
+  function drawLabels(canvas, rows, opts = {}) {
+    if (!rows.length) { canvas.width = 0; canvas.height = 0; return null; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rowH = opts.rowHeight || 38;
     const headerH = 24;
-    container.innerHTML = '';
-    const spacer = document.createElement('div');
-    spacer.style.height = headerH + 'px';
-    container.appendChild(spacer);
-    rows.forEach((r) => {
-      const row = document.createElement('div');
-      row.className = 'gantt-label-row';
-      row.style.height = rowH + 'px';
+    const width = opts.width || 128;
+    const height = headerH + rows.length * rowH + 10;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    rows.forEach((r, i) => {
+      const cy = headerH + i * rowH + rowH / 2;
+      ctx.fillStyle = '#1F2430';
+      ctx.font = '13px sans-serif';
       const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
-      row.textContent = `${name}（${r.totalManDays}工）`;
-      container.appendChild(row);
+      ctx.fillText(`${name}（${r.totalManDays}工）`, 4, cy);
     });
+
+    return { width, height };
   }
 
-  return { draw, renderLabels, buildRows, isBehindSchedule };
+  return { draw, drawLabels, buildRows, isBehindSchedule };
 })();

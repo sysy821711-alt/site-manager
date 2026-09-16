@@ -50,7 +50,7 @@
     <h2 class="section-title">進度甘特圖</h2>
     <p class="hint-text">淺色長條＝預排工期，深色格子＝實際到場天，紅框＝進度落後，紅線＝今天。</p>
     <div class="gantt-wrap">
-      <div class="gantt-labels" id="gantt-labels"></div>
+      <div class="gantt-labels"><canvas id="gantt-labels-canvas"></canvas></div>
       <div class="gantt-scroll"><canvas id="gantt-canvas"></canvas></div>
     </div>
     <div id="gantt-empty" class="empty-state hidden"><p>尚未有工地資料</p></div>
@@ -125,7 +125,7 @@
 
     <div id="subtab-gantt" class="subtab-panel">
       <div class="gantt-wrap">
-        <div class="gantt-labels" id="detail-gantt-labels"></div>
+        <div class="gantt-labels"><canvas id="detail-gantt-labels-canvas"></canvas></div>
         <div class="gantt-scroll"><canvas id="detail-gantt-canvas"></canvas></div>
       </div>
       <p id="detail-gantt-stats" class="text-muted"></p>

@@ -283,18 +283,8 @@ label:first-child { margin-top: 0; }
   padding: 6px 0;
   overflow: hidden;
 }
-.gantt-label-row {
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .gantt-scroll { overflow-x: auto; flex: 1; padding: 6px 6px 6px 0; }
-#gantt-canvas, #detail-gantt-canvas { display: block; }
+#gantt-canvas, #detail-gantt-canvas, #gantt-labels-canvas, #detail-gantt-labels-canvas { display: block; }
 
 /* ---------- Attendance ---------- */
 .attendance-table { display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 14px; }

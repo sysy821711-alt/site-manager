@@ -138,20 +138,21 @@ const App = (() => {
   async function renderGanttOverview() {
     const projects = await DB.getProjects();
     const canvas = document.getElementById('gantt-canvas');
-    const labelsEl = document.getElementById('gantt-labels');
+    const labelsCanvas = document.getElementById('gantt-labels-canvas');
     const emptyEl = document.getElementById('gantt-empty');
     if (!projects.length) {
       emptyEl.classList.remove('hidden');
-      labelsEl.innerHTML = '';
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      labelsCanvas.width = 0;
+      labelsCanvas.height = 0;
       return;
     }
     emptyEl.classList.add('hidden');
     const dailyLogsByProject = {};
     for (const p of projects) dailyLogsByProject[p.id] = await DB.getDailyLogs(p.id);
     const rows = Gantt.buildRows(projects, dailyLogsByProject);
-    Gantt.renderLabels(labelsEl, rows);
+    Gantt.drawLabels(labelsCanvas, rows);
     Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, includeLabels: false });
   }
 
@@ -200,8 +201,8 @@ const App = (() => {
     const logs = await DB.getDailyLogs(project.id);
     const rows = Gantt.buildRows([project], { [project.id]: logs });
     const canvas = document.getElementById('detail-gantt-canvas');
-    const labelsEl = document.getElementById('detail-gantt-labels');
-    Gantt.renderLabels(labelsEl, rows, { rowHeight: 48 });
+    const labelsCanvas = document.getElementById('detail-gantt-labels-canvas');
+    Gantt.drawLabels(labelsCanvas, rows, { rowHeight: 48 });
     Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, rowHeight: 48, includeLabels: false });
     const row = rows[0];
     const statsEl = document.getElementById('detail-gantt-stats');
