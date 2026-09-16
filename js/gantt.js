@@ -28,7 +28,7 @@ const Gantt = (() => {
   }
 
   // rows: [{ project, actualDates: Set<'YYYY-MM-DD'>, totalManDays }]
-  // actualDates（不重複日期）驅動進度條上的格子與落後判斷；totalManDays（總人天，把每天出工人數加總）只用於列標籤顯示。
+  // actualDates（不重複日期）驅動進度條上的格子與落後判斷；totalManDays（總工數，把每天出工人數加總）只用於列標籤顯示。
   function buildRows(projects, dailyLogsByProject) {
     return projects.map((project) => {
       const logs = dailyLogsByProject[project.id] || [];
@@ -155,7 +155,7 @@ const Gantt = (() => {
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'left';
       const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
-      ctx.fillText(`${name}（${r.totalManDays}人天）`, 4, cy);
+      ctx.fillText(`${name}（${r.totalManDays}工）`, 4, cy);
 
       const ps = parseDate(r.project.plannedStart);
       const pe = parseDate(r.project.plannedEnd);
