@@ -28,12 +28,26 @@ const Todos = (() => {
         renderList(currentProjectId);
       });
 
+      const main = document.createElement('div');
+      main.className = 'todo-main';
+
       const textEl = document.createElement('span');
       textEl.className = 'todo-text';
       textEl.textContent = todo.text;
+      main.appendChild(textEl);
+
+      if (todo.dueDate) {
+        const dueEl = document.createElement('span');
+        const todayStr = DB.toDateStr(new Date());
+        const state = todo.done ? '' : todo.dueDate < todayStr ? 'overdue' : todo.dueDate === todayStr ? 'due-today' : '';
+        dueEl.className = 'todo-due' + (state ? ' ' + state : '');
+        const label = state === 'overdue' ? '已逾期' : state === 'due-today' ? '今天到期' : '提醒';
+        dueEl.textContent = `⏰ ${todo.dueDate}（${label}）`;
+        main.appendChild(dueEl);
+      }
 
       item.appendChild(checkbox);
-      item.appendChild(textEl);
+      item.appendChild(main);
 
       const reportToggle = document.createElement('input');
       reportToggle.type = 'checkbox';
@@ -81,7 +95,14 @@ const Todos = (() => {
       editBtn.addEventListener('click', async () => {
         const next = prompt('編輯待辦事項', todo.text);
         if (next == null || !next.trim()) return;
-        await DB.updateTodo(todo.id, { text: next.trim() });
+        const nextDue = prompt('提醒日期（YYYY-MM-DD，留空表示不提醒）', todo.dueDate || '');
+        if (nextDue == null) return;
+        const dueDate = nextDue.trim();
+        if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+          alert('日期格式不正確，請用 YYYY-MM-DD');
+          return;
+        }
+        await DB.updateTodo(todo.id, { text: next.trim(), dueDate: dueDate || null });
         App.notifyDataChanged();
         renderList(currentProjectId);
       });
@@ -108,6 +129,7 @@ const Todos = (() => {
   async function handleSubmit(e) {
     e.preventDefault();
     const input = document.getElementById('todo-input');
+    const dueInput = document.getElementById('todo-due-input');
     const text = input.value.trim();
     if (!text) return;
 
@@ -117,9 +139,10 @@ const Todos = (() => {
       const photo = await DB.addPhoto({ projectId: currentProjectId, blob, caption: text });
       photoId = photo.id;
     }
-    await DB.addTodo({ projectId: currentProjectId, text, photoId });
+    await DB.addTodo({ projectId: currentProjectId, text, photoId, dueDate: dueInput.value || null });
 
     input.value = '';
+    dueInput.value = '';
     pendingPhotoFile = null;
     document.getElementById('todo-photo-input').value = '';
     document.getElementById('todo-photo-pending').classList.add('hidden');

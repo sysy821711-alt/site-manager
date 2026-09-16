@@ -375,8 +375,9 @@ label:first-child { margin-top: 0; }
 }
 
 /* ---------- Todos ---------- */
-.todo-form { display: flex; gap: 8px; align-items: center; }
-.todo-form input[type="text"] { flex: 1; }
+.todo-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.todo-form input[type="text"] { flex: 1 1 100%; }
+.todo-form input[type="date"] { flex: 1 1 auto; min-width: 0; color: var(--text-muted); }
 #todo-photo-pending { margin: 6px 0 0; }
 .todo-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .todo-item {
@@ -390,7 +391,11 @@ label:first-child { margin-top: 0; }
 }
 .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-muted); }
 .todo-item input[type="checkbox"] { width: auto; flex-shrink: 0; }
-.todo-text { flex: 1; font-size: 14px; }
+.todo-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.todo-text { font-size: 14px; }
+.todo-due { font-size: 11px; color: var(--text-muted); }
+.todo-due.due-today { color: #B8720C; font-weight: 600; }
+.todo-due.overdue { color: #D6432F; font-weight: 600; }
 .todo-thumb { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; cursor: pointer; flex-shrink: 0; }
 .todo-delete-btn { flex-shrink: 0; font-size: 15px; color: var(--text-muted); }
 

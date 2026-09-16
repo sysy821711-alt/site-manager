@@ -280,14 +280,21 @@ const DB = (() => {
   // ---------- Todos ----------
   async function getTodos(projectId) {
     const todos = projectId ? await getByIndexRaw('todos', 'projectId', projectId) : await getAllRaw('todos');
-    return todos.filter(t => !t.deletedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // 未完成的排前面；有提醒日期的依日期由近到遠（含已逾期）排最前，其餘依建立時間新到舊
+    return todos.filter(t => !t.deletedAt).sort((a, b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
   }
 
   async function getTodo(id) {
     return getById('todos', id);
   }
 
-  async function addTodo({ projectId, text, photoId } = {}) {
+  async function addTodo({ projectId, text, photoId, dueDate } = {}) {
     const now = Date.now();
     const todo = {
       id: uid(),
@@ -295,6 +302,7 @@ const DB = (() => {
       text: text || '',
       done: false,
       photoId: photoId || null,
+      dueDate: dueDate || null,
       includeInReport: true,
       createdAt: now,
       updatedAt: now
