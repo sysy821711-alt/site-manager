@@ -2,6 +2,8 @@
 const DailyLog = (() => {
   let currentProjectId = null;
   let editingId = null;
+  let personnelTags = [];
+  let knownPersonnelNames = [];
 
   async function renderList(projectId) {
     currentProjectId = projectId;
@@ -43,21 +45,91 @@ const DailyLog = (() => {
     });
   }
 
-  function openForm(log) {
+  // ---------- 出工人員 tag input（記憶輸入：從 datalist 選或打完按 Enter，統一存成陣列） ----------
+  function renderPersonnelTags() {
+    const container = document.getElementById('log-personnel-tags');
+    const input = document.getElementById('log-personnel-tag-input');
+    container.querySelectorAll('.tag-pill').forEach((el) => el.remove());
+    personnelTags.forEach((name) => {
+      const pill = document.createElement('span');
+      pill.className = 'tag-pill';
+      const text = document.createElement('span');
+      text.textContent = name;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'tag-pill-remove';
+      removeBtn.setAttribute('aria-label', `移除 ${name}`);
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => {
+        personnelTags = personnelTags.filter((n) => n !== name);
+        renderPersonnelTags();
+      });
+      pill.appendChild(text);
+      pill.appendChild(removeBtn);
+      container.insertBefore(pill, input);
+    });
+  }
+
+  function commitPersonnelTag(rawValue) {
+    const input = document.getElementById('log-personnel-tag-input');
+    const value = (rawValue != null ? rawValue : input.value).trim();
+    input.value = '';
+    if (!value || personnelTags.includes(value)) return;
+    personnelTags.push(value);
+    renderPersonnelTags();
+  }
+
+  let personnelTagInputBound = false;
+  function bindPersonnelTagInput() {
+    const input = document.getElementById('log-personnel-tag-input');
+    if (personnelTagInputBound) return;
+    personnelTagInputBound = true;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        commitPersonnelTag();
+      } else if (e.key === 'Backspace' && !input.value && personnelTags.length) {
+        personnelTags.pop();
+        renderPersonnelTags();
+      }
+    });
+    // 從 datalist 點選建議名字時，值會直接變成完全相符 → 立刻收成一個 tag，不用再按 Enter
+    input.addEventListener('input', () => {
+      const val = input.value.trim();
+      if (val && knownPersonnelNames.includes(val)) commitPersonnelTag(val);
+    });
+    input.addEventListener('blur', () => commitPersonnelTag());
+  }
+
+  async function openForm(log) {
     editingId = log ? log.id : null;
     document.getElementById('log-form-title').textContent = log ? '編輯日誌' : '新增日誌';
     document.getElementById('log-date-input').value = log ? log.date : DB.toDateStr(new Date());
-    document.getElementById('log-personnel-input').value = log ? (log.personnel || []).join(', ') : '';
     document.getElementById('log-weather-input').value = log ? (log.weather || '') : '';
     document.getElementById('log-notes-input').value = log ? (log.notes || '') : '';
     document.getElementById('log-delete-btn').classList.toggle('hidden', !log);
+
+    personnelTags = log ? (log.personnel || []).slice() : [];
+    document.getElementById('log-personnel-tag-input').value = '';
+    renderPersonnelTags();
+
+    knownPersonnelNames = await DB.getPersonnelNames();
+    const datalist = document.getElementById('personnel-suggestions');
+    datalist.innerHTML = '';
+    knownPersonnelNames.forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      datalist.appendChild(opt);
+    });
+    bindPersonnelTagInput();
+
     App.showModal('log-form-modal');
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const personnel = document.getElementById('log-personnel-input').value
-      .split(',').map((s) => s.trim()).filter(Boolean);
+    commitPersonnelTag();
+    const personnel = personnelTags.slice();
     const data = {
       projectId: currentProjectId,
       date: document.getElementById('log-date-input').value || DB.toDateStr(new Date()),
@@ -75,6 +147,7 @@ const DailyLog = (() => {
     } else {
       await DB.addDailyLog(data);
     }
+    if (personnel.length) await DB.rememberPersonnelNames(personnel);
     App.hideModal('log-form-modal');
     App.notifyDataChanged();
     await renderList(currentProjectId);

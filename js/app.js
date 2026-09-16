@@ -199,6 +199,17 @@ const App = (() => {
     document.getElementById('backup-export-btn').addEventListener('click', exportBackup);
     document.getElementById('backup-import-input').addEventListener('change', importBackup);
 
+    document.getElementById('personnel-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('personnel-add-input');
+      const name = input.value.trim();
+      if (!name) return;
+      await DB.rememberPersonnelNames([name]);
+      input.value = '';
+      await renderPersonnelManageList();
+    });
+    await renderPersonnelManageList();
+
     Sync.onStatusChange((status, err) => {
       const btn = document.getElementById('sync-now-btn');
       const errEl = document.getElementById('sync-error');
@@ -221,6 +232,53 @@ const App = (() => {
     await updateSyncUI();
     await updateStorageLabel();
     await updatePendingLabel();
+  }
+
+  async function renderPersonnelManageList() {
+    const listEl = document.getElementById('personnel-manage-list');
+    const emptyEl = document.getElementById('personnel-manage-empty');
+    if (!listEl) return;
+    const names = await DB.getPersonnelNames();
+    emptyEl.classList.toggle('hidden', names.length > 0);
+    listEl.innerHTML = '';
+    names.forEach((name) => {
+      const row = document.createElement('div');
+      row.className = 'personnel-manage-row';
+
+      const span = document.createElement('span');
+      span.textContent = name;
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'icon-btn';
+      editBtn.setAttribute('aria-label', `編輯 ${name}`);
+      editBtn.textContent = '✎';
+      editBtn.addEventListener('click', async () => {
+        const next = prompt('編輯姓名', name);
+        if (next == null) return;
+        const trimmed = next.trim();
+        if (!trimmed || trimmed === name) return;
+        await DB.renamePersonnelName(name, trimmed);
+        await renderPersonnelManageList();
+        toast('已更新姓名');
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'icon-btn';
+      deleteBtn.setAttribute('aria-label', `刪除 ${name}`);
+      deleteBtn.textContent = '✕';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`確定要從常用名單移除「${name}」嗎？（不會影響已存的施工日誌）`)) return;
+        await DB.deletePersonnelName(name);
+        await renderPersonnelManageList();
+      });
+
+      row.appendChild(span);
+      row.appendChild(editBtn);
+      row.appendChild(deleteBtn);
+      listEl.appendChild(row);
+    });
   }
 
   async function updatePendingLabel() {

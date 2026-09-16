@@ -61,6 +61,16 @@
       <input id="settings-company" type="text" placeholder="例如：大安工程行">
     </div>
     <div class="card">
+      <h3>常用出工人員</h3>
+      <p class="text-muted">寫日誌時的自動完成建議清單，刪除或改名不會影響已存的施工日誌。</p>
+      <form id="personnel-add-form" class="todo-form">
+        <input id="personnel-add-input" type="text" placeholder="新增姓名">
+        <button type="submit" class="primary-btn">新增</button>
+      </form>
+      <div id="personnel-manage-list" class="personnel-manage-list"></div>
+      <p id="personnel-manage-empty" class="text-muted hidden">尚無記錄的人員</p>
+    </div>
+    <div class="card">
       <h3>OneDrive 雲端同步</h3>
       <p id="sync-account-info" class="text-muted">尚未登入</p>
       <button id="onedrive-login-btn" class="primary-btn full-width">登入 Microsoft 帳號</button>
@@ -212,8 +222,11 @@
     <form id="log-form">
       <label for="log-date-input">日期</label>
       <input id="log-date-input" type="date" required>
-      <label for="log-personnel-input">出工人員（逗號分隔）</label>
-      <input id="log-personnel-input" type="text" placeholder="例如：阿明, 阿華, 小林">
+      <label for="log-personnel-tag-input">出工人員</label>
+      <div id="log-personnel-tags" class="tag-input">
+        <input id="log-personnel-tag-input" type="text" list="personnel-suggestions" placeholder="輸入姓名後按 Enter 新增" autocomplete="off">
+      </div>
+      <datalist id="personnel-suggestions"></datalist>
       <label for="log-weather-input">實際天氣</label>
       <select id="log-weather-input">
         <option value="">選擇天氣</option>

@@ -328,6 +328,41 @@ const DB = (() => {
     return updated;
   }
 
+  // ---------- 出工人員記憶（跨工地共用，讓日誌表單能自動完成、避免同一人打成不同名字） ----------
+  async function getPersonnelNames() {
+    const s = await getSettings();
+    return Array.isArray(s.personnelNames) ? s.personnelNames : [];
+  }
+
+  async function rememberPersonnelNames(names) {
+    const current = await getPersonnelNames();
+    const set = new Set(current);
+    let changed = false;
+    (names || []).forEach((raw) => {
+      const name = (raw || '').trim();
+      if (name && !set.has(name)) { set.add(name); changed = true; }
+    });
+    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    if (changed) await updateSettings({ personnelNames: sorted });
+    return sorted;
+  }
+
+  async function deletePersonnelName(name) {
+    const current = await getPersonnelNames();
+    const next = current.filter((n) => n !== name);
+    if (next.length !== current.length) await updateSettings({ personnelNames: next });
+    return next;
+  }
+
+  async function renamePersonnelName(oldName, newName) {
+    const current = await getPersonnelNames();
+    const set = new Set(current.filter((n) => n !== oldName));
+    const trimmed = (newName || '').trim();
+    if (trimmed) set.add(trimmed);
+    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    await updateSettings({ personnelNames: sorted });
+    return sorted;
+  }
 
   function blobToDataUrl(blob) {
     return new Promise((resolve, reject) => {
@@ -415,7 +450,7 @@ const DB = (() => {
     getPhotos, getPhoto, addPhoto, updatePhoto, markPhotoUploaded, deletePhoto,
     addAnnotation, updateAnnotation, deleteAnnotation,
     getTodos, getTodo, addTodo, updateTodo, deleteTodo,
-    getSettings, updateSettings, exportBackup, importBackup, validateBackup, getStorageInfo,
+    getSettings, updateSettings, getPersonnelNames, rememberPersonnelNames, deletePersonnelName, renamePersonnelName, exportBackup, importBackup, validateBackup, getStorageInfo,
     getAllProjectsRaw, getAllDailyLogsRaw, getAllTodosRaw, getAllPhotosRaw, mergeRecord
   };
 })();

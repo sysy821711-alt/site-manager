@@ -105,7 +105,63 @@ label:first-child { margin-top: 0; }
 .checkbox-row input { width: auto; }
 
 .date-row { display: flex; gap: 10px; }
+
+/* ---------- Tag input（出工人員：可記憶／自動完成） ---------- */
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--card-bg);
+}
+.tag-input input {
+  flex: 1;
+  min-width: 100px;
+  border: none;
+  padding: 4px 2px;
+}
+.tag-input input:focus { outline: none; }
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 3px 4px 3px 10px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.tag-pill-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.tag-pill-remove:active { background: var(--border); }
 .date-row > div { flex: 1; }
+
+/* ---------- 常用出工人員管理（設定頁） ---------- */
+.personnel-manage-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.personnel-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 8px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.personnel-manage-row span { flex: 1; }
+.personnel-manage-row .icon-btn { font-size: 15px; padding: 6px 8px; }
 
 /* ---------- Buttons ---------- */
 .primary-btn, .secondary-btn, .danger-btn {
