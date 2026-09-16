@@ -329,39 +329,60 @@ const DB = (() => {
   }
 
   // ---------- 出工人員記憶（跨工地共用，讓日誌表單能自動完成、避免同一人打成不同名字） ----------
+  // 候選名單 = 手動記住的名字 ∪ 所有日誌裡實際出現過的名字（自動回溯歷史紀錄），
+  // 再扣掉「已隱藏」的名字（刪除時用，確保真的不會再被建議，即使舊日誌裡還留著）。
+  function sortNames(names) {
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  }
+
   async function getPersonnelNames() {
     const s = await getSettings();
-    return Array.isArray(s.personnelNames) ? s.personnelNames : [];
+    const explicit = Array.isArray(s.personnelNames) ? s.personnelNames : [];
+    const hidden = new Set(Array.isArray(s.hiddenPersonnelNames) ? s.hiddenPersonnelNames : []);
+    const logs = await getAllDailyLogsRaw();
+    const derived = new Set(explicit);
+    logs.forEach((log) => {
+      if (log.deletedAt) return;
+      (log.personnel || []).forEach((raw) => {
+        const name = (raw || '').trim();
+        if (name) derived.add(name);
+      });
+    });
+    hidden.forEach((name) => derived.delete(name));
+    return sortNames(derived);
   }
 
   async function rememberPersonnelNames(names) {
-    const current = await getPersonnelNames();
-    const set = new Set(current);
+    const s = await getSettings();
+    const explicit = new Set(Array.isArray(s.personnelNames) ? s.personnelNames : []);
+    const hidden = new Set(Array.isArray(s.hiddenPersonnelNames) ? s.hiddenPersonnelNames : []);
     let changed = false;
     (names || []).forEach((raw) => {
       const name = (raw || '').trim();
-      if (name && !set.has(name)) { set.add(name); changed = true; }
+      if (!name) return;
+      if (!explicit.has(name)) { explicit.add(name); changed = true; }
+      if (hidden.has(name)) { hidden.delete(name); changed = true; } // 主動再次使用，優先於先前的隱藏
     });
-    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-    if (changed) await updateSettings({ personnelNames: sorted });
-    return sorted;
+    if (changed) {
+      await updateSettings({ personnelNames: sortNames(explicit), hiddenPersonnelNames: Array.from(hidden) });
+    }
+    return getPersonnelNames();
   }
 
   async function deletePersonnelName(name) {
-    const current = await getPersonnelNames();
-    const next = current.filter((n) => n !== name);
-    if (next.length !== current.length) await updateSettings({ personnelNames: next });
-    return next;
+    const s = await getSettings();
+    const explicit = (Array.isArray(s.personnelNames) ? s.personnelNames : []).filter((n) => n !== name);
+    const hidden = new Set(Array.isArray(s.hiddenPersonnelNames) ? s.hiddenPersonnelNames : []);
+    hidden.add(name);
+    await updateSettings({ personnelNames: explicit, hiddenPersonnelNames: Array.from(hidden) });
+    return getPersonnelNames();
   }
 
   async function renamePersonnelName(oldName, newName) {
-    const current = await getPersonnelNames();
-    const set = new Set(current.filter((n) => n !== oldName));
+    await deletePersonnelName(oldName); // 隱藏舊名字，避免又被歷史日誌撈回來
     const trimmed = (newName || '').trim();
-    if (trimmed) set.add(trimmed);
-    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-    await updateSettings({ personnelNames: sorted });
-    return sorted;
+    if (trimmed) await rememberPersonnelNames([trimmed]);
+    return getPersonnelNames();
   }
 
   function blobToDataUrl(blob) {

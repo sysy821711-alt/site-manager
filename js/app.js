@@ -90,6 +90,7 @@ const App = (() => {
     if (state.view === 'projects') await Projects.renderList();
     else if (state.view === 'gantt') await renderGanttOverview();
     else if (state.view === 'detail') await renderProjectDetail(state.projectId, { keepSubtab: true });
+    else if (state.view === 'settings') await renderPersonnelManageList();
   }
 
   function notifyDataChanged() {
