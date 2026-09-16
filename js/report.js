@@ -218,10 +218,17 @@ const Report = (() => {
     });
   }
 
+  // canvas -> bytes：用 toBlob 而不是 fetch(data:URL)，避免嚴格 CSP 環境擋掉 data: 請求
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('canvas 轉檔失敗'))), type, quality);
+    });
+  }
+
   // ---------- 甘特圖（沿用畫面上同一份 Gantt 繪圖邏輯，轉成圖片內嵌） ----------
   async function canvasToPngBytes(canvas) {
-    const res = await fetch(canvas.toDataURL('image/png'));
-    return new Uint8Array(await res.arrayBuffer());
+    const blob = await canvasToBlob(canvas, 'image/png');
+    return new Uint8Array(await blob.arrayBuffer());
   }
 
   async function drawGanttSection(ctx, logs) {
@@ -272,8 +279,8 @@ const Report = (() => {
     canvas.width = w;
     canvas.height = h;
     canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    const res = await fetch(canvas.toDataURL('image/jpeg', 0.85));
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.85);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
     return { bytes, width: w, height: h };
   }
 
@@ -293,33 +300,93 @@ const Report = (() => {
     });
   }
 
-  async function drawPhotoPage(ctx, photo) {
-    const { bytes, width, height } = await photoToJpegBytes(photo, 1400);
-    const img = await ctx.pdfDoc.embedJpg(bytes);
-    const maxW = CONTENT_W;
-    const maxH = 340;
-    const scale = Math.min(maxW / width, maxH / height, 1);
-    const w = width * scale;
-    const h = height * scale;
-    const x = MARGIN + (CONTENT_W - w) / 2;
-    ctx.ensureSpace(h + 10);
-    const y = ctx.y - h;
-    ctx.page.drawImage(img, { x, y, width: w, height: h });
-    drawPhotoAnnotations(ctx.page, ctx.font, photo.annotations, x, y, w, h);
-    ctx.y = y - 18;
+  // 直式相片 3欄x2列＝一頁6張，橫式相片 2欄x2列＝一頁4張；同一天的照片分在同一組，組間強制換頁
+  const PHOTO_GRID = {
+    portrait: { cols: 3, rows: 2, cellW: 163, cellH: 220, gapX: 10, gapY: 20 },
+    landscape: { cols: 2, rows: 2, cellW: 248, cellH: 186, gapX: 14, gapY: 22 }
+  };
 
-    if (photo.caption) {
-      ctx.y = drawParagraph(ctx.page, ctx.font, photo.caption, MARGIN, ctx.y, CONTENT_W, 11, 15, COLOR.text);
-      ctx.y -= 4;
-    }
-    if (photo.takenAt) {
-      drawText(ctx.page, ctx.font, formatDateTime(new Date(photo.takenAt)), MARGIN, ctx.y, 8, COLOR.muted);
-      ctx.y -= 18;
-    }
-    (photo.annotations || []).forEach((a, idx) => {
-      ctx.ensureSpace(16);
-      ctx.y = drawParagraph(ctx.page, ctx.font, `${idx + 1}. ${a.note || '（無備註）'}`, MARGIN, ctx.y, CONTENT_W, 10, 14, COLOR.danger);
+  function orientationOf(w, h) {
+    return h >= w ? 'portrait' : 'landscape';
+  }
+
+  function groupPhotosByDate(photos) {
+    const map = new Map();
+    photos.forEach((p) => {
+      const key = DB.toDateStr(new Date(p.takenAt || Date.now()));
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
     });
+    return map;
+  }
+
+  function drawDateHeader(ctx, dateStr, count, continued) {
+    ctx.ensureSpace(34);
+    const barH = 16;
+    const topY = ctx.y;
+    ctx.page.drawRectangle({ x: MARGIN, y: topY - barH, width: 4, height: barH, color: COLOR.primary });
+    const weekday = ['日', '一', '二', '三', '四', '五', '六'][new Date(dateStr + 'T00:00:00').getDay()];
+    const label = `${dateStr.replace(/-/g, '/')}（週${weekday}）（${count} 張）${continued ? '續' : ''}`;
+    drawText(ctx.page, ctx.font, label, MARGIN + 12, topY - barH + 4, 13, COLOR.text);
+    ctx.y -= 30;
+  }
+
+  async function drawPhotoGridSection(ctx, photos) {
+    if (!photos.length) {
+      ctx.y = drawParagraph(ctx.page, ctx.font, '（尚無照片）', MARGIN, ctx.y, CONTENT_W, 10, 14, COLOR.muted);
+      return;
+    }
+
+    const groups = groupPhotosByDate(photos);
+    const dateKeys = Array.from(groups.keys()).sort();
+
+    let firstGroup = true;
+    for (const dateKey of dateKeys) {
+      const group = groups.get(dateKey);
+      if (!firstGroup) ctx.newPage();
+      firstGroup = false;
+      drawDateHeader(ctx, dateKey, group.length);
+
+      let grid = null;
+      for (const photo of group) {
+        const { bytes, width, height } = await photoToJpegBytes(photo, 1000);
+        const orientation = orientationOf(width, height);
+        const cfg = PHOTO_GRID[orientation];
+
+        const needsNewGrid = !grid || grid.orientation !== orientation || grid.row >= cfg.rows;
+        if (needsNewGrid) {
+          if (grid) {
+            ctx.newPage();
+            drawDateHeader(ctx, dateKey, group.length, true);
+          }
+          ctx.ensureSpace(cfg.cellH + 20);
+          grid = { orientation, cfg, col: 0, row: 0, top: ctx.y };
+        }
+
+        const cellX = MARGIN + grid.col * (cfg.cellW + cfg.gapX);
+        const cellY = grid.top - grid.row * (cfg.cellH + cfg.gapY) - cfg.cellH;
+
+        const img = await ctx.pdfDoc.embedJpg(bytes);
+        const scale = Math.min(cfg.cellW / width, cfg.cellH / height);
+        const w = width * scale;
+        const h = height * scale;
+        const x = cellX + (cfg.cellW - w) / 2;
+        const y = cellY + (cfg.cellH - h) / 2;
+        ctx.page.drawImage(img, { x, y, width: w, height: h });
+        drawPhotoAnnotations(ctx.page, ctx.font, photo.annotations, x, y, w, h);
+
+        if (photo.caption) {
+          const [line] = wrapText(ctx.font, photo.caption, 8, cfg.cellW);
+          if (line) drawText(ctx.page, ctx.font, line, cellX, cellY - 10, 8, COLOR.muted);
+        }
+
+        grid.col += 1;
+        if (grid.col >= cfg.cols) {
+          grid.col = 0;
+          grid.row += 1;
+        }
+      }
+    }
   }
 
   // ---------- 浮水印／頁碼（所有頁面內容都畫完後，最後統一加上） ----------
@@ -385,12 +452,9 @@ const Report = (() => {
       drawTodos(ctx, todos);
     }
     if (opts.includePhotos) {
-      const photos = await DB.getPhotos(project.id);
-      for (const photo of photos) {
-        ctx.newPage();
-        ctx.heading('工地照片');
-        await drawPhotoPage(ctx, photo);
-      }
+      ctx.newPage();
+      ctx.heading('工地照片');
+      await drawPhotoGridSection(ctx, await DB.getPhotos(project.id));
     }
 
     finalizePages(ctx.pdfDoc, ctx.font, project, ctx.settings);
@@ -402,12 +466,9 @@ const Report = (() => {
     ctx.newPage();
     drawCover(ctx);
 
-    const photos = await DB.getPhotos(project.id);
-    for (const photo of photos) {
-      ctx.newPage();
-      ctx.heading('工地照片');
-      await drawPhotoPage(ctx, photo);
-    }
+    ctx.newPage();
+    ctx.heading('工地照片');
+    await drawPhotoGridSection(ctx, await DB.getPhotos(project.id));
 
     finalizePages(ctx.pdfDoc, ctx.font, project, ctx.settings);
     return ctx.pdfDoc;
