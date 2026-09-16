@@ -84,6 +84,28 @@ const Gantt = (() => {
     return { min, max };
   }
 
+  // 單一列自己的日期範圍（不受其他工地影響），給「每個工地各自獨立軸」的畫法用
+  function computeRowRange(row) {
+    let min = null;
+    let max = null;
+    const today = today0();
+    const ps = parseDate(row.project.plannedStart);
+    const pe = parseDate(row.project.plannedEnd);
+    if (ps) min = ps;
+    if (pe) max = pe;
+    row.actualDates.forEach((ds) => {
+      const d = parseDate(ds);
+      if (d && (!min || d < min)) min = d;
+      if (d && (!max || d > max)) max = d;
+    });
+    if (!min) min = today;
+    if (!max) max = today;
+    if (max < min) max = min;
+    min = addDays(min, -1);
+    max = addDays(max, 2);
+    return { min, max };
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     const rr = Math.min(r, Math.abs(w) / 2, h / 2);
     ctx.beginPath();
@@ -122,6 +144,13 @@ const Gantt = (() => {
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, fullWidth, height);
+
+    // 每列交錯底色＋底部分隔線，讓每個案場的列一眼就能分開，不會跟旁邊的列混在一起
+    rows.forEach((r, i) => {
+      const y = headerH + i * rowH;
+      ctx.fillStyle = i % 2 === 0 ? '#F7F8FA' : '#FFFFFF';
+      ctx.fillRect(0, y, fullWidth, rowH);
+    });
 
     const xOf = (d) => labelW + daysBetween(min, d) * dayW;
 
@@ -188,6 +217,17 @@ const Gantt = (() => {
       });
     });
 
+    // 每列底部分隔線（畫在最上層，蓋過底色跟長條，確保清晰可見）
+    ctx.strokeStyle = '#E5E8EF';
+    ctx.lineWidth = 1;
+    rows.forEach((r, i) => {
+      const y = headerH + (i + 1) * rowH;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(fullWidth, y);
+      ctx.stroke();
+    });
+
     // 今天紅線
     const t = today0();
     if (t >= min && t <= max) {
@@ -210,7 +250,7 @@ const Gantt = (() => {
     if (!rows.length) { canvas.width = 0; canvas.height = 0; return null; }
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rowH = opts.rowHeight || 38;
-    const headerH = 24;
+    const headerH = opts.headerHeight != null ? opts.headerHeight : 24;
     const width = opts.width || 128;
     const height = headerH + rows.length * rowH + 10;
 
@@ -222,6 +262,13 @@ const Gantt = (() => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
+    // 交錯底色要跟 draw() 的時間軸 canvas 用同樣的規則（同 i 同顏色），視覺上才會連成同一列
+    rows.forEach((r, i) => {
+      const y = headerH + i * rowH;
+      ctx.fillStyle = i % 2 === 0 ? '#F7F8FA' : '#FFFFFF';
+      ctx.fillRect(0, y, width, rowH);
+    });
+
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     rows.forEach((r, i) => {
@@ -232,8 +279,110 @@ const Gantt = (() => {
       ctx.fillText(`${name}（${r.totalManDays}工）`, 4, cy);
     });
 
+    ctx.strokeStyle = '#E5E8EF';
+    ctx.lineWidth = 1;
+    rows.forEach((r, i) => {
+      const y = headerH + (i + 1) * rowH;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    });
+
     return { width, height };
   }
 
-  return { draw, drawLabels, buildRows, isBehindSchedule };
+  // 跨工地總覽用：每個工地一張自己的 canvas，用「固定」每日寬度畫格線＋長條，
+  // 不同工地天數差異很大時（有的3天、有的90天）不會互相擠壓格子寬度——
+  // 每天永遠是同樣大小、看得清楚的格子；工期長的工地畫布會變寬，
+  // 交給外層各自獨立的橫向捲動容器（.gantt-row-scroll）處理，工地之間互不影響、可各自左右拉看。
+  function drawRowTimeline(canvas, row, opts = {}) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rowH = opts.rowHeight || 56;
+    const dayW = opts.dayWidth || 34;
+    const paddingR = 8;
+    const { min, max } = computeRowRange(row);
+    const totalDays = Math.max(1, daysBetween(min, max));
+    const width = totalDays * dayW + paddingR;
+    const height = rowH;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const xOf = (d) => daysBetween(min, d) * dayW;
+
+    // 每天一條格線＋日期，月份變化才顯示「M/D」，同月份只顯示日數，維持跟其他甘特圖畫法一致的可讀性
+    ctx.strokeStyle = '#EEF0F5';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#9AA1B4';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    let lastMonth = null;
+    for (let i = 0; i <= totalDays; i++) {
+      const x = i * dayW;
+      ctx.beginPath();
+      ctx.moveTo(x, 14);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+      if (i < totalDays) {
+        const d = addDays(min, i);
+        const isNewMonth = lastMonth !== d.getMonth();
+        lastMonth = d.getMonth();
+        ctx.fillText(isNewMonth ? fmt(d) : `${d.getDate()}`, x + dayW / 2, 11);
+      }
+    }
+
+    const ps = parseDate(row.project.plannedStart);
+    const pe = parseDate(row.project.plannedEnd);
+    const barY = 20;
+    const barH = 22;
+
+    if (ps && pe) {
+      const x1 = xOf(ps);
+      const x2 = xOf(addDays(pe, 1));
+      ctx.fillStyle = row.delayed ? 'rgba(247,110,79,0.20)' : 'rgba(232,134,46,0.20)';
+      roundRect(ctx, x1, barY, Math.max(3, x2 - x1), barH, 6);
+      ctx.fill();
+      if (row.delayed) {
+        ctx.strokeStyle = '#F76E4F';
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, x1, barY, Math.max(3, x2 - x1), barH, 6);
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = '#B7BBC9';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('尚未設定預排工期', 4, barY + 15);
+    }
+
+    ctx.fillStyle = '#3A70D6';
+    row.actualDates.forEach((ds) => {
+      const d = parseDate(ds);
+      if (!d) return;
+      const x = xOf(d);
+      ctx.fillRect(x + 1, barY + 4, Math.max(2, dayW - 2), barH - 8);
+    });
+
+    const t = today0();
+    if (t >= min && t <= max) {
+      const x = xOf(t);
+      ctx.strokeStyle = '#F76E4F';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, barY - 3);
+      ctx.lineTo(x, barY + barH + 3);
+      ctx.stroke();
+    }
+
+    return { width, height };
+  }
+
+  return { draw, drawLabels, drawRowTimeline, buildRows, isBehindSchedule };
 })();

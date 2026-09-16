@@ -267,7 +267,8 @@ label:first-child { margin-top: 0; }
 .card h3 { margin: 0 0 10px; font-size: 15px; }
 
 /* ---------- Gantt ---------- */
-/* 工地名稱固定在左邊、不隨橫向捲動移動；只有右邊的時間軸（.gantt-scroll）會捲動 */
+/* 工地名稱固定在左邊、不隨橫向捲動移動；總覽每個工地一列各自獨立橫向捲動（.gantt-row-scroll），
+   工地詳細頁只有單一工地一列時間軸，仍用單一 .gantt-scroll 捲動 */
 .gantt-wrap {
   display: flex;
   align-items: stretch;
@@ -284,7 +285,10 @@ label:first-child { margin-top: 0; }
   overflow: hidden;
 }
 .gantt-scroll { overflow-x: auto; flex: 1; padding: 6px 6px 6px 0; }
-#gantt-canvas, #detail-gantt-canvas, #gantt-labels-canvas, #detail-gantt-labels-canvas { display: block; }
+.gantt-rows { flex: 1; display: flex; flex-direction: column; padding: 6px 6px 6px 0; min-width: 0; }
+.gantt-row-scroll { overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--border); }
+.gantt-row-scroll:last-child { border-bottom: none; }
+#detail-gantt-canvas, #gantt-labels-canvas, #detail-gantt-labels-canvas, .gantt-row-scroll canvas { display: block; }
 
 /* ---------- Attendance ---------- */
 .attendance-table { display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 14px; }

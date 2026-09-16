@@ -137,13 +137,12 @@ const App = (() => {
   // ---------- 甘特圖總覽（跨工地） ----------
   async function renderGanttOverview() {
     const projects = await DB.getProjects();
-    const canvas = document.getElementById('gantt-canvas');
+    const rowsContainer = document.getElementById('gantt-rows');
     const labelsCanvas = document.getElementById('gantt-labels-canvas');
     const emptyEl = document.getElementById('gantt-empty');
     if (!projects.length) {
       emptyEl.classList.remove('hidden');
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      rowsContainer.innerHTML = '';
       labelsCanvas.width = 0;
       labelsCanvas.height = 0;
       return;
@@ -152,8 +151,23 @@ const App = (() => {
     const dailyLogsByProject = {};
     for (const p of projects) dailyLogsByProject[p.id] = await DB.getDailyLogs(p.id);
     const rows = Gantt.buildRows(projects, dailyLogsByProject);
-    Gantt.drawLabels(labelsCanvas, rows);
-    Gantt.draw(canvas, rows, { width: canvas.parentElement.clientWidth - 4, includeLabels: false });
+    // 依「預排開工日」由早到晚排序；沒有設定開工日的工地排到最後。
+    // 只排序這一份 rows 陣列，左側名稱欄與右側每一列時間軸都吃同一份，兩邊順序才會永遠對得上。
+    rows.sort((a, b) => (a.project.plannedStart || '9999-99-99').localeCompare(b.project.plannedStart || '9999-99-99'));
+    const rowHeight = 56;
+    Gantt.drawLabels(labelsCanvas, rows, { rowHeight, headerHeight: 6 });
+    // 每個工地一個獨立的橫向捲動容器＋自己的 canvas，天數多寡不會互相影響格子寬度，
+    // 各工地可以各自左右拉看自己的時程，不會共用同一條捲軸。
+    rowsContainer.innerHTML = '';
+    rows.forEach((r) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'gantt-row-scroll';
+      wrap.style.height = rowHeight + 'px';
+      const cv = document.createElement('canvas');
+      wrap.appendChild(cv);
+      rowsContainer.appendChild(wrap);
+      Gantt.drawRowTimeline(cv, r, { rowHeight, dayWidth: 34 });
+    });
   }
 
   // ---------- 工地詳細 ----------
