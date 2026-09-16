@@ -27,12 +27,17 @@ const Gantt = (() => {
     return t;
   }
 
-  // rows: [{ project, actualDates: Set<'YYYY-MM-DD'> }]
+  // rows: [{ project, actualDates: Set<'YYYY-MM-DD'>, totalManDays }]
+  // actualDates（不重複日期）驅動進度條上的格子與落後判斷；totalManDays（總人天，把每天出工人數加總）只用於列標籤顯示。
   function buildRows(projects, dailyLogsByProject) {
     return projects.map((project) => {
       const logs = dailyLogsByProject[project.id] || [];
       const actualDates = new Set(logs.map((l) => l.date));
-      const row = { project, actualDates };
+      const totalManDays = logs.reduce((sum, log) => {
+        const count = Array.isArray(log.personnel) ? log.personnel.filter((n) => (n || '').trim()).length : 0;
+        return sum + count;
+      }, 0);
+      const row = { project, actualDates, totalManDays };
       row.delayed = isBehindSchedule(row);
       return row;
     });
@@ -95,7 +100,7 @@ const Gantt = (() => {
     if (!rows.length) return null;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rowH = opts.rowHeight || 38;
-    const labelW = opts.labelWidth || 118;
+    const labelW = opts.labelWidth || 128;
     const headerH = 24;
     const paddingR = 20;
     const width = Math.max(320, opts.width || canvas.clientWidth || 600);
@@ -150,7 +155,7 @@ const Gantt = (() => {
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'left';
       const name = r.project.name.length > 6 ? r.project.name.slice(0, 5) + '…' : r.project.name;
-      ctx.fillText(`${name}（${r.actualDates.size}天）`, 4, cy);
+      ctx.fillText(`${name}（${r.totalManDays}人天）`, 4, cy);
 
       const ps = parseDate(r.project.plannedStart);
       const pe = parseDate(r.project.plannedEnd);
