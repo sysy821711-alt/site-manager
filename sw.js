@@ -1,4 +1,4 @@
-const CACHE_NAME = 'site-manager-v2';
+const CACHE_NAME = 'site-manager-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const APP_SHELL = [
   './js/auth.js',
   './js/sync.js',
   './js/gantt.js',
+  './js/attendance.js',
   './js/photos.js',
   './js/report.js',
   './js/projects.js',

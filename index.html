@@ -78,6 +78,7 @@
     <nav class="subtabs" id="detail-subtabs">
       <button class="subtab-btn active" data-subtab="log">日誌</button>
       <button class="subtab-btn" data-subtab="gantt">進度</button>
+      <button class="subtab-btn" data-subtab="attendance">出勤統計</button>
       <button class="subtab-btn" data-subtab="photos">照片</button>
       <button class="subtab-btn" data-subtab="todos">待辦</button>
       <button class="subtab-btn" data-subtab="report">報告</button>
@@ -92,6 +93,11 @@
     <div id="subtab-gantt" class="subtab-panel">
       <div class="gantt-scroll"><canvas id="detail-gantt-canvas"></canvas></div>
       <p id="detail-gantt-stats" class="text-muted"></p>
+    </div>
+
+    <div id="subtab-attendance" class="subtab-panel">
+      <div id="attendance-table" class="attendance-table"></div>
+      <div id="attendance-empty" class="empty-state hidden"><p>尚無出勤紀錄</p></div>
     </div>
 
     <div id="subtab-photos" class="subtab-panel">
@@ -248,6 +254,7 @@
 <script src="js/auth.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/gantt.js"></script>
+<script src="js/attendance.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/report.js"></script>
 <script src="js/projects.js"></script>

@@ -74,6 +74,7 @@ const DailyLog = (() => {
     App.notifyDataChanged();
     await renderList(currentProjectId);
     App.refreshDetailGantt();
+    App.refreshDetailAttendance();
   }
 
   async function handleDelete() {
@@ -84,6 +85,7 @@ const DailyLog = (() => {
     App.notifyDataChanged();
     await renderList(currentProjectId);
     App.refreshDetailGantt();
+    App.refreshDetailAttendance();
   }
 
   function bindEvents() {

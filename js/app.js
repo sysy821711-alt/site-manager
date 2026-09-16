@@ -122,6 +122,7 @@ const App = (() => {
     const projectId = state.projectId;
     if (subtab === 'log') await DailyLog.renderList(projectId);
     else if (subtab === 'gantt') await refreshDetailGantt();
+    else if (subtab === 'attendance') await Attendance.renderView(projectId);
     else if (subtab === 'photos') await Photos.renderGrid(projectId);
     else if (subtab === 'todos') await Todos.renderList(projectId);
   }
@@ -138,6 +139,11 @@ const App = (() => {
     const statsEl = document.getElementById('detail-gantt-stats');
     statsEl.textContent = `實際到場 ${row.actualDates.size} 天${row.delayed ? '　⚠ 進度落後於預排工期' : ''}`;
     statsEl.classList.toggle('warning-text', row.delayed);
+  }
+
+  async function refreshDetailAttendance() {
+    if (state.view !== 'detail' || state.subtab !== 'attendance' || !state.projectId) return;
+    await Attendance.renderView(state.projectId);
   }
 
   // ---------- 設定／OneDrive 同步 ----------
@@ -317,6 +323,6 @@ const App = (() => {
 
   return {
     showModal, hideModal, statusLabel, toast,
-    openProjectDetail, goToProjectList, refreshCurrentView, notifyDataChanged, refreshDetailGantt
+    openProjectDetail, goToProjectList, refreshCurrentView, notifyDataChanged, refreshDetailGantt, refreshDetailAttendance
   };
 })();

@@ -163,29 +163,7 @@ const Report = (() => {
     }
   }
 
-  // ---------- 人員出勤統計（從施工日誌的出工人員自動彙整，不需另外輸入） ----------
-  function buildAttendanceStats(logs) {
-    const map = new Map();
-    logs.forEach((log) => {
-      (log.personnel || []).forEach((rawName) => {
-        const name = (rawName || '').trim();
-        if (!name) return;
-        if (!map.has(name)) map.set(name, new Set());
-        map.get(name).add(log.date);
-      });
-    });
-    return Array.from(map.entries())
-      .map(([name, datesSet]) => ({ name, dates: Array.from(datesSet).sort(), count: datesSet.size }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hant'));
-  }
-
-  // 同一份報告通常都在一年內，日期簡化成「月/日」比較好讀
-  function shortDate(dateStr) {
-    const parts = (dateStr || '').split('-');
-    if (parts.length !== 3) return dateStr;
-    return `${Number(parts[1])}/${Number(parts[2])}`;
-  }
-
+  // ---------- 人員出勤統計（統計邏輯共用 js/attendance.js，跟畫面上的出勤統計分頁一致） ----------
   const ATTEND_COL_NAME = MARGIN;
   const ATTEND_COL_DAYS = MARGIN + 90;
   const ATTEND_COL_DATES = MARGIN + 160;
@@ -201,14 +179,14 @@ const Report = (() => {
   }
 
   function drawAttendance(ctx, logs) {
-    const stats = buildAttendanceStats(logs);
+    const stats = Attendance.buildStats(logs);
     if (!stats.length) {
       ctx.y = drawParagraph(ctx.page, ctx.font, '（尚無出勤紀錄）', MARGIN, ctx.y, CONTENT_W, 10, 14, COLOR.muted);
       return;
     }
     drawAttendanceHeader(ctx);
     stats.forEach((person) => {
-      const datesText = person.dates.map(shortDate).join('、');
+      const datesText = person.dates.map(Attendance.shortDate).join('、');
       const dateLines = wrapText(ctx.font, datesText, 9, ATTEND_COL_DATES_W);
       const rowHeight = Math.max(1, dateLines.length) * 13 + 12;
       ctx.ensureSpace(rowHeight, () => {

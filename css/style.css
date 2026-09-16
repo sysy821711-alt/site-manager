@@ -209,6 +209,23 @@ label:first-child { margin-top: 0; }
 .gantt-scroll { overflow-x: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
 #gantt-canvas, #detail-gantt-canvas { display: block; }
 
+/* ---------- Attendance ---------- */
+.attendance-table { display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 14px; }
+.attendance-row {
+  display: grid;
+  grid-template-columns: 72px 60px 1fr;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  align-items: start;
+}
+.attendance-row:last-child { border-bottom: none; }
+.attendance-header { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.attendance-name { font-weight: 600; color: var(--text); }
+.attendance-count { color: var(--primary); font-weight: 600; }
+.attendance-dates { color: var(--text-muted); word-break: break-word; }
+
 /* ---------- Project detail ---------- */
 .project-detail-header {
   display: flex;
