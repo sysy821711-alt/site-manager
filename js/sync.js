@@ -16,6 +16,24 @@ const Sync = (() => {
     }));
   }
 
+  // 把 Graph 回傳的錯誤內容（error.code / error.message）附進錯誤訊息，
+  // 不然畫面上只會看到一個 HTTP 狀態碼，同樣的 400/403 可能是完全不同原因（設定問題 vs 帳號問題）。
+  async function describeError(res) {
+    try {
+      const body = await res.clone().json();
+      if (body && body.error) return `${res.status} ${body.error.code || ''}：${body.error.message || ''}`.trim();
+    } catch (e) { /* 回應不是 JSON，就只顯示狀態碼 */ }
+    return `HTTP ${res.status}`;
+  }
+
+  // 某些全新的 OneDrive 個人帳號從未用過「App 專屬資料夾」功能時，第一次直接用路徑
+  // （special/approot:/xxx）操作其底下項目會回 400，要先對 special/approot 本身發一次
+  // 不帶路徑的 GET，讓 Graph 把這個特殊資料夾建立/初始化出來，後續操作才會正常。
+  async function ensureAppRoot(token) {
+    const res = await graphFetch(APPROOT, token, { method: 'GET' });
+    if (!res.ok) throw new Error(`初始化 OneDrive App 資料夾失敗：${await describeError(res)}`);
+  }
+
   async function ensureFolder(token, name) {
     const res = await graphFetch(`${APPROOT}:/${encodeURIComponent(name)}`, token, { method: 'GET' });
     if (res.status === 404) {
@@ -24,15 +42,15 @@ const Sync = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' })
       });
-      if (!createRes.ok) throw new Error(`建立雲端資料夾失敗：HTTP ${createRes.status}`);
+      if (!createRes.ok) throw new Error(`建立雲端資料夾失敗：${await describeError(createRes)}`);
     } else if (!res.ok) {
-      throw new Error(`檢查雲端資料夾失敗：HTTP ${res.status}`);
+      throw new Error(`檢查雲端資料夾失敗：${await describeError(res)}`);
     }
   }
 
   async function deleteFile(token, path) {
     const res = await graphFetch(`${APPROOT}:/${path}`, token, { method: 'DELETE' });
-    if (!res.ok && res.status !== 404) throw new Error(`刪除 ${path} 失敗：HTTP ${res.status}`);
+    if (!res.ok && res.status !== 404) throw new Error(`刪除 ${path} 失敗：${await describeError(res)}`);
   }
 
   async function uploadSmallFile(token, path, content, contentType) {
@@ -41,14 +59,14 @@ const Sync = (() => {
       headers: { 'Content-Type': contentType || 'application/octet-stream' },
       body: content
     });
-    if (!res.ok) throw new Error(`上傳 ${path} 失敗：HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`上傳 ${path} 失敗：${await describeError(res)}`);
     return res.json();
   }
 
   async function downloadFile(token, path) {
     const res = await graphFetch(`${APPROOT}:/${path}:/content`, token, { method: 'GET' });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`下載 ${path} 失敗：HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`下載 ${path} 失敗：${await describeError(res)}`);
     return res;
   }
 
@@ -59,7 +77,7 @@ const Sync = (() => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } })
     });
-    if (!sessionRes.ok) throw new Error(`建立照片上傳工作階段失敗：HTTP ${sessionRes.status}`);
+    if (!sessionRes.ok) throw new Error(`建立照片上傳工作階段失敗：${await describeError(sessionRes)}`);
     const session = await sessionRes.json();
     const uploadUrl = session.uploadUrl;
     const chunkSize = 5 * 1024 * 1024;
@@ -152,6 +170,7 @@ const Sync = (() => {
     emitStatus('syncing');
     try {
       const token = await Auth.getToken();
+      await ensureAppRoot(token);
       await ensureFolder(token, 'photos');
       await pullData(token);
       await pushData(token);
