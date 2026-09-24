@@ -94,7 +94,7 @@ const Sync = (() => {
         },
         body: chunk
       });
-      if (!res.ok && res.status !== 202) throw new Error(`照片上傳失敗：HTTP ${res.status}`);
+      if (!res.ok && res.status !== 202) throw new Error(`照片上傳失敗：${await describeError(res)}`);
       start = end;
     }
   }
@@ -104,6 +104,7 @@ const Sync = (() => {
       DB.getAllProjectsRaw(), DB.getAllDailyLogsRaw(), DB.getAllTodosRaw(), DB.getAllPhotosRaw()
     ]);
     const failed = [];
+    let firstError = '';
     for (const p of photosRaw) {
       try {
         if (p.deletedAt) {
@@ -115,9 +116,10 @@ const Sync = (() => {
       } catch (err) {
         console.error('同步照片失敗', p.id, err);
         failed.push(p.id);
+        if (!firstError) firstError = err && err.message ? err.message : String(err);
       }
     }
-    if (failed.length) throw new Error(`${failed.length} 張照片同步失敗，稍後將自動重試`);
+    if (failed.length) throw new Error(`${failed.length} 張照片同步失敗（${firstError}），稍後將自動重試`);
 
     const latestPhotos = await DB.getAllPhotosRaw();
     const photosMeta = latestPhotos.map((p) => ({
