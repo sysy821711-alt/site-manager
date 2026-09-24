@@ -64,7 +64,14 @@ const Sync = (() => {
   }
 
   async function downloadFile(token, path) {
-    const res = await graphFetch(`${APPROOT}:/${path}:/content`, token, { method: 'GET' });
+    let res;
+    try {
+      res = await graphFetch(`${APPROOT}:/${path}:/content`, token, { method: 'GET' });
+    } catch (netErr) {
+      // Graph 會把內容下載 302 轉址到別的網域；那個網域若不在 CSP connect-src 白名單，
+      // fetch 只會丟出無資訊的 Failed to fetch，這裡補上是哪個檔案，方便判斷。
+      throw new Error(`下載 ${path} 失敗：無法連線（${netErr.message}）`);
+    }
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`下載 ${path} 失敗：${await describeError(res)}`);
     return res;
