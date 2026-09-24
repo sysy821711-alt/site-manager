@@ -171,7 +171,14 @@ const Sync = (() => {
     try {
       const token = await Auth.getToken();
       await ensureAppRoot(token);
-      await ensureFolder(token, 'photos');
+      // 預先建立 photos 資料夾只是順便，不是必要條件：Graph 上傳檔案（PUT / createUploadSession）
+      // 會自動建立缺少的上層資料夾。個人 OneDrive 帳號建立資料夾偶爾會回 400 invalidRequest，
+      // 這裡失敗不該擋住整個同步；真正的問題會在後面上傳步驟以完整錯誤訊息顯示。
+      try {
+        await ensureFolder(token, 'photos');
+      } catch (folderErr) {
+        console.warn('預先建立 photos 資料夾失敗，改由上傳時自動建立', folderErr);
+      }
       await pullData(token);
       await pushData(token);
       await DB.updateSettings({ lastSyncAt: Date.now() });
