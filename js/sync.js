@@ -72,6 +72,12 @@ const Sync = (() => {
 
   // 照片走 resumable upload session，處理 >4MB 檔案（Graph 簡單 PUT 上限 4MB）
   async function uploadLargeFile(token, path, blob) {
+    // 4MB 以下直接 PUT 到 graph.microsoft.com（CSP 已允許）。upload session 回傳的 uploadUrl
+    // 網域依帳號類型不同，個人 OneDrive 的網域不在 CSP connect-src 白名單內，fetch 會直接 Failed to fetch。
+    if (blob.size <= 4 * 1024 * 1024) {
+      await uploadSmallFile(token, path, blob, 'image/jpeg');
+      return;
+    }
     const sessionRes = await graphFetch(`${APPROOT}:/${path}:/createUploadSession`, token, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

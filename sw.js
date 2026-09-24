@@ -1,4 +1,4 @@
-const CACHE_NAME = 'site-manager-v15';
+const CACHE_NAME = 'site-manager-v16';
 const APP_SHELL = [
   './',
   './index.html',
